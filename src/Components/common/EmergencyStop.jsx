@@ -13,13 +13,13 @@ const EmergencyStop = ({ onStop }) => {
     <button
       onClick={handleStop}
       disabled={isPressed}
-      className={`w-full py-6 rounded-xl font-bold text-white text-lg transition-all transform ${
+      className={`w-full py-4 rounded-lg font-bold text-white text-xl tracking-widest uppercase transition-all transform shadow-lg ${
         isPressed
-          ? 'bg-red-800 scale-95'
-          : 'bg-linear-to-br from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 active:scale-95 shadow-lg hover:shadow-xl'
+          ? 'bg-red-800 scale-[0.99]'
+          : 'bg-gradient-to-r from-red-600 to-red-700 hover:shadow-red-500/50 active:scale-[0.99]'
       }`}
     >
-      {isPressed ? '⚠️ EMERGENCY STOP ACTIVATED' : '🛑 EMERGENCY STOP'}
+      {isPressed ? '⚠️ EMERGENCY STOP ACTIVATED' : 'Emergency Stop'}
     </button>
   );
 };
