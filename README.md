@@ -1,16 +1,245 @@
-# React + Vite
+# Nexus Core - Factory Management System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern, real-time factory monitoring dashboard built with React and Tailwind CSS. Monitor production metrics, machine health, and environmental sensors in a professional, intuitive interface.
 
-Currently, two official plugins are available:
+![React](https://img.shields.io/badge/React-19.2.1-61DAFB?logo=react)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.1.17-38B2AC?logo=tailwind-css)
+![Vite](https://img.shields.io/badge/Vite-7.2.4-646CFF?logo=vite)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 🌟 Features
 
-## React Compiler
+### Production Dashboard
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Real-time KPI Monitoring** - Track production count, target achievement, and efficiency
+- **Weekly Production Charts** - Visualize 7-day production trends with Recharts
+- **RFID Production Log** - Monitor product entries with timestamps and locations
+- **Emergency Stop Controls** - Quick-access safety controls
 
-## Expanding the ESLint configuration
+### Machine Monitoring
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **6 Environmental Sensors**:
+
+  - 🔧 Vibration monitoring with radial gauge
+  - 🌡️ Temperature tracking with trend indicators
+  - 💧 Humidity levels with status indicators
+  - 📊 Hydraulic pressure monitoring
+  - 🔊 Noise level detection
+  - 🌫️ Air quality index (PM2.5, CO₂)
+
+- **Real-time Charts** - Live sensor data visualization with toggleable metrics
+- **Historical Analysis** - 24-hour environmental data trends
+- **Control Panel** - Motor/ventilation controls with threshold settings
+
+### Advanced Visualization
+
+- **Individual Graph Toggles** - Show/hide specific metrics in charts
+- **Status-based Colors** - Chart lines match sensor status indicators
+- **Professional SVG Icons** - Clean, scalable icons throughout the UI
+- **Responsive Design** - Optimized for desktop and tablet displays
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 16.x or higher
+- npm or yarn package manager
+
+### Installation
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/ttmagedara2001/Factory-Management-System_PC.git
+   cd Factory-Management-System_PC
+   ```
+
+2. **Install dependencies**
+
+   ```bash
+   npm install
+   ```
+
+3. **Start development server**
+
+   ```bash
+   npm run dev
+   ```
+
+4. **Open your browser**
+   ```
+   http://localhost:5173
+   ```
+
+### Build for Production
+
+```bash
+npm run build
+npm run preview
+```
+
+## 📁 Project Structure
+
+```
+Factory-Management-System_PC/
+├── src/
+│   ├── components/
+│   │   ├── common/           # Reusable UI components
+│   │   │   ├── Card.jsx
+│   │   │   ├── Badge.jsx
+│   │   │   ├── Button.jsx
+│   │   │   ├── ToggleSwitch.jsx
+│   │   │   └── EmergencyStop.jsx
+│   │   ├── layout/           # Layout components
+│   │   │   ├── Header.jsx
+│   │   │   └── TabNavigation.jsx
+│   │   ├── icons/            # Professional SVG icons
+│   │   │   └── SensorIcons.jsx
+│   │   └── dashboard/
+│   │       ├── production/   # Production monitoring
+│   │       │   ├── KpiCard.jsx
+│   │       │   ├── ProductionLog.jsx
+│   │       │   └── ProductionChart.jsx
+│   │       └── machine/      # Machine monitoring
+│   │           ├── VibrationGauge.jsx
+│   │           ├── TemperatureDisplay.jsx
+│   │           ├── HumidityDisplay.jsx
+│   │           ├── PressureDisplay.jsx
+│   │           ├── NoiseLevelDisplay.jsx
+│   │           ├── AirQualityDisplay.jsx
+│   │           ├── MultiSensorChart.jsx
+│   │           ├── EnvironmentalChart.jsx
+│   │           └── ControlsPanel.jsx
+│   ├── hooks/                # Custom React hooks
+│   │   ├── useMqttConnection.js
+│   │   └── useFactoryData.js
+│   ├── pages/                # Main pages
+│   │   └── DashboardHome.jsx
+│   ├── App.jsx               # Root component
+│   ├── main.jsx              # Entry point
+│   └── index.css             # Global styles
+├── public/                   # Static assets
+├── index.html
+├── vite.config.js
+├── tailwind.config.js
+├── postcss.config.js
+└── package.json
+```
+
+## 🎨 Tech Stack
+
+- **Framework**: React 19.2.1
+- **Build Tool**: Vite 7.2.4
+- **Styling**: Tailwind CSS 4.1.17
+- **Charts**: Recharts 3.5.1
+- **Icons**: Custom SVG components
+- **Linting**: ESLint 9.39.1
+
+## 🎯 Key Components
+
+### Dashboard Tabs
+
+- **Productions & Logistics** - Production metrics and RFID logs
+- **Machine Monitoring** - Real-time sensor data and environmental charts
+
+### Sensor Displays
+
+All sensors include:
+
+- Real-time value updates
+- Status indicators (Normal/Warning/Critical)
+- Visual gauges/charts
+- Configurable thresholds
+
+### Charts
+
+- **MultiSensorChart** - Real-time vibration, temperature, pressure
+- **EnvironmentalChart** - 24-hour temperature, humidity, noise, AQI
+- **ProductionChart** - 7-day production vs target trends
+
+## 🔧 Configuration
+
+### Tailwind CSS
+
+Custom design tokens in `tailwind.config.js`:
+
+- Slate color palette (primary grays)
+- Emerald (success states)
+- Amber (warning states)
+- Red (error/critical states)
+
+### Data Hooks
+
+- `useFactoryData` - Simulates API polling every 5 seconds
+- `useMqttConnection` - Simulates MQTT real-time updates
+
+## 📊 Dummy Data
+
+The dashboard uses simulated data for demonstration:
+
+- Production metrics update every 5 seconds
+- Sensor values fluctuate within realistic ranges
+- Charts show mock historical data
+
+## 🎨 Design System
+
+### Color Palette
+
+- **Background**: Slate-50 (#f8fafc)
+- **Cards**: White with subtle shadows
+- **Success**: Emerald-600 (#059669)
+- **Warning**: Amber-600 (#d97706)
+- **Error**: Red-600 (#dc2626)
+- **Text**: Slate-800 (#1e293b)
+
+### Typography
+
+- System font stack for optimal performance
+- Bold weights for emphasis
+- Monospace for data values
+
+## 📝 Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## 👥 Author
+
+**Thulani Magedara**
+
+- GitHub: [@ttmagedara2001](https://github.com/ttmagedara2001)
+
+## 🙏 Acknowledgments
+
+- React team for the amazing framework
+- Tailwind CSS for the utility-first CSS framework
+- Recharts for beautiful chart components
+- Vite for lightning-fast development experience
+
+## 📚 Documentation
+
+For detailed documentation, see:
+
+- [Components Documentation](./COMPONENTS_README.md)
+- [Tailwind Setup Guide](./TAILWIND_SETUP.md)
+- [Chart Enhancements](./CHART_ENHANCEMENTS.md)
+
+---
+
+**Built with ❤️ for modern factory monitoring**
