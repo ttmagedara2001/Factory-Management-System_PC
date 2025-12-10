@@ -10,7 +10,7 @@ const Badge = ({ status, children }) => {
   const style = statusStyles[status?.toLowerCase()] || 'bg-slate-100 text-slate-600';
 
   return (
-    <span className={`px-3 py-1 rounded-full text-sm font-medium ${style}`}>
+    <span className={`px-4 py-2 rounded-full text-sm font-medium inline-flex items-center justify-center ${style}`}>
       {children || status}
     </span>
   );
