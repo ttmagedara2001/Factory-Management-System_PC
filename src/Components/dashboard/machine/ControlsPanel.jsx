@@ -1,233 +1,286 @@
 import { useState } from 'react';
 import Card from '../../common/Card';
-import ToggleSwitch from '../../common/ToggleSwitch';
 
 const ControlsPanel = () => {
-  const [motorOn, setMotorOn] = useState(false);
-  const [ventilationAuto, setVentilationAuto] = useState(false);
-  const [mode, setMode] = useState('manual');
-  const [minVibration, setMinVibration] = useState(0);
-  const [maxVibration, setMaxVibration] = useState(8);
-  const [minPressure, setMinPressure] = useState(2);
-  const [maxPressure, setMaxPressure] = useState(8);
-  const [minTemp, setMinTemp] = useState(15);
-  const [maxTemp, setMaxTemp] = useState(35);
-  const [minHumidity, setMinHumidity] = useState(30);
-  const [maxHumidity, setMaxHumidity] = useState(70);
-  const [maxNoise, setMaxNoise] = useState(85);
-  const [maxAQI, setMaxAQI] = useState(100);
+  const [motorState, setMotorState] = useState('STOP');
+  const [ventilationMode, setVentilationMode] = useState('MANUAL OFF');
+  const [operatingMode, setOperatingMode] = useState('MANUAL');
+  const [showToast, setShowToast] = useState(false);
+  
+  // Threshold states
+  const [vibrationMin, setVibrationMin] = useState(2);
+  const [vibrationMax, setVibrationMax] = useState(8);
+  const [pressureMin, setPressureMin] = useState(12);
+  const [pressureMax, setPressureMax] = useState(44);
+  const [tempMin, setTempMin] = useState(15);
+  const [tempMax, setTempMax] = useState(35);
+  const [humidityMin, setHumidityMin] = useState(30);
+  const [humidityMax, setHumidityMax] = useState(70);
+  const [noiseMax, setNoiseMax] = useState(85);
+  const [aqiMax, setAqiMax] = useState(100);
+
+  const handleSaveSettings = () => {
+    // TODO: POST to REST API endpoint
+    const settings = {
+      vibration: { min: vibrationMin, max: vibrationMax },
+      pressure: { min: pressureMin, max: pressureMax },
+      temperature: { min: tempMin, max: tempMax },
+      humidity: { min: humidityMin, max: humidityMax },
+      noise: { max: noiseMax },
+      aqi: { max: aqiMax }
+    };
+    console.log('Saving settings:', settings);
+    
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
+  const handleMotorToggle = () => {
+    const newState = motorState === 'RUN' ? 'STOP' : 'RUN';
+    setMotorState(newState);
+    // TODO: Publish to MQTT protonest/<device>/state/updates
+    console.log('Motor state:', newState);
+  };
+
+  const handleVentilationToggle = () => {
+    const newMode = ventilationMode === 'AUTO' ? 'MANUAL OFF' : 'AUTO';
+    setVentilationMode(newMode);
+    // TODO: Publish to MQTT
+    console.log('Ventilation mode:', newMode);
+  };
 
   return (
-    <Card className="col-span-2">
-      <h3 className="text-lg font-semibold text-slate-800 mb-6">Controls & Settings</h3>
+    <Card className="space-y-6">
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold text-slate-800">Control Panel & Configuration</h3>
+        <p className="text-sm text-slate-500">
+          Manage machine states and keep sensor thresholds aligned with your safety limits.
+        </p>
+      </div>
       
       <div className="space-y-6">
         {/* Machine Controls */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <ToggleSwitch
-              label="Main Conveyor Motor"
-              checked={motorOn}
-              onChange={setMotorOn}
-            />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Main Conveyor Motor */}
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-slate-700">Main Conveyor Motor</span>
+              <button
+                onClick={handleMotorToggle}
+                className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
+                  motorState === 'RUN'
+                    ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                    : 'bg-red-500 text-white hover:bg-red-600'
+                }`}
+              >
+                {motorState}
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500">Power Switch</label>
+              <div className="flex-1 flex items-center gap-2">
+                <button
+                  onClick={() => setMotorState('STOP')}
+                  className={`flex-1 py-1 text-xs font-medium rounded transition-colors ${
+                    motorState === 'STOP'
+                      ? 'bg-red-600 text-white'
+                      : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                  }`}
+                >
+                  STOP
+                </button>
+                <button
+                  onClick={() => setMotorState('RUN')}
+                  className={`flex-1 py-1 text-xs font-medium rounded transition-colors ${
+                    motorState === 'RUN'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                  }`}
+                >
+                  RUN
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <ToggleSwitch
-              label={`Ventilation: ${ventilationAuto ? 'Auto' : 'Manual'}`}
-              checked={ventilationAuto}
-              onChange={setVentilationAuto}
-            />
+
+          {/* Ventilation Control */}
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-slate-700">Ventilation System</span>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                ventilationMode === 'AUTO'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-slate-200 text-slate-700'
+              }`}>
+                {ventilationMode}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500">Mode Control</label>
+              <button
+                onClick={handleVentilationToggle}
+                className="flex-1 py-2 px-4 bg-slate-700 text-white text-xs font-medium rounded hover:bg-slate-800 transition-colors"
+              >
+                Toggle Mode
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Mode Selector */}
+        {/* Operating Mode Selector */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-3">Operating Mode</label>
-          <div className="flex space-x-2 bg-slate-100 p-1 rounded-lg">
-            {['auto', 'manual', 'maintenance'].map((m) => (
+          <div className="grid grid-cols-3 gap-2">
+            {['MANUAL', 'AUTO', 'MAINTENANCE'].map((mode) => (
               <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`flex-1 py-2 px-4 rounded-md font-medium text-sm transition-all ${
-                  mode === m
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
+                key={mode}
+                onClick={() => setOperatingMode(mode)}
+                className={`py-2.5 px-4 rounded-lg font-medium text-sm transition-all border-2 ${
+                  operatingMode === mode
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
                 }`}
               >
-                {m.charAt(0).toUpperCase() + m.slice(1)}
+                {mode}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Threshold Settings */}
+        {/* Threshold Configuration */}
         <div className="pt-4 border-t border-slate-200">
-          <h4 className="text-sm font-medium text-slate-700 mb-4">Sensor Threshold Settings</h4>
-          <div className="grid grid-cols-3 gap-6">
-            {/* Vibration Thresholds */}
-            <div>
-              <h5 className="text-xs font-semibold text-slate-600 mb-3">Vibration (mm/s)</h5>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-slate-500">Min</label>
-                  <input
-                    type="number"
-                    value={minVibration}
-                    onChange={(e) => setMinVibration(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 text-sm"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500">Max</label>
-                  <input
-                    type="number"
-                    value={maxVibration}
-                    onChange={(e) => setMaxVibration(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 text-sm"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                  />
-                </div>
+          <h4 className="text-sm font-semibold text-slate-700 mb-4">Sensor Threshold Configuration</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Motor Vibration */}
+            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-lg p-3 shadow-sm">
+              <h5 className="text-xs font-semibold text-slate-700">Motor Vibration (mm/s)</h5>
+              <div className="space-y-2">
+                <input
+                  type="number"
+                  value={vibrationMin}
+                  onChange={(e) => setVibrationMin(Number(e.target.value))}
+                  placeholder="Min"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+                <input
+                  type="number"
+                  value={vibrationMax}
+                  onChange={(e) => setVibrationMax(Number(e.target.value))}
+                  placeholder="Max"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
               </div>
             </div>
 
-            {/* Pressure Thresholds */}
-            <div>
-              <h5 className="text-xs font-semibold text-slate-600 mb-3">Pressure (bar)</h5>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-slate-500">Min</label>
-                  <input
-                    type="number"
-                    value={minPressure}
-                    onChange={(e) => setMinPressure(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 text-sm"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500">Max</label>
-                  <input
-                    type="number"
-                    value={maxPressure}
-                    onChange={(e) => setMaxPressure(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 text-sm"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                  />
-                </div>
+            {/* Hydraulic Pressure */}
+            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-lg p-3 shadow-sm">
+              <h5 className="text-xs font-semibold text-slate-700">Hydraulic Pressure (bar)</h5>
+              <div className="space-y-2">
+                <input
+                  type="number"
+                  value={pressureMin}
+                  onChange={(e) => setPressureMin(Number(e.target.value))}
+                  placeholder="Min"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+                <input
+                  type="number"
+                  value={pressureMax}
+                  onChange={(e) => setPressureMax(Number(e.target.value))}
+                  placeholder="Max"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
               </div>
             </div>
 
-            {/* Temperature Thresholds */}
-            <div>
-              <h5 className="text-xs font-semibold text-slate-600 mb-3">Temperature (°C)</h5>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-slate-500">Min</label>
-                  <input
-                    type="number"
-                    value={minTemp}
-                    onChange={(e) => setMinTemp(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 text-sm"
-                    min="0"
-                    max="50"
-                    step="0.5"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500">Max</label>
-                  <input
-                    type="number"
-                    value={maxTemp}
-                    onChange={(e) => setMaxTemp(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 text-sm"
-                    min="0"
-                    max="50"
-                    step="0.5"
-                  />
-                </div>
+            {/* Temperature */}
+            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-lg p-3 shadow-sm">
+              <h5 className="text-xs font-semibold text-slate-700">Temperature (°C)</h5>
+              <div className="space-y-2">
+                <input
+                  type="number"
+                  value={tempMin}
+                  onChange={(e) => setTempMin(Number(e.target.value))}
+                  placeholder="Min"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+                <input
+                  type="number"
+                  value={tempMax}
+                  onChange={(e) => setTempMax(Number(e.target.value))}
+                  placeholder="Max"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
               </div>
             </div>
 
-            {/* Humidity Thresholds */}
-            <div>
-              <h5 className="text-xs font-semibold text-slate-600 mb-3">Humidity (%)</h5>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-slate-500">Min</label>
-                  <input
-                    type="number"
-                    value={minHumidity}
-                    onChange={(e) => setMinHumidity(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 text-sm"
-                    min="0"
-                    max="100"
-                    step="1"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500">Max</label>
-                  <input
-                    type="number"
-                    value={maxHumidity}
-                    onChange={(e) => setMaxHumidity(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 text-sm"
-                    min="0"
-                    max="100"
-                    step="1"
-                  />
-                </div>
+            {/* Humidity */}
+            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-lg p-3 shadow-sm">
+              <h5 className="text-xs font-semibold text-slate-700">Humidity (%)</h5>
+              <div className="space-y-2">
+                <input
+                  type="number"
+                  value={humidityMin}
+                  onChange={(e) => setHumidityMin(Number(e.target.value))}
+                  placeholder="Min"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+                <input
+                  type="number"
+                  value={humidityMax}
+                  onChange={(e) => setHumidityMax(Number(e.target.value))}
+                  placeholder="Max"
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
               </div>
             </div>
 
-            {/* Noise Level Threshold */}
-            <div>
-              <h5 className="text-xs font-semibold text-slate-600 mb-3">Noise Level (dB)</h5>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-slate-500">Max Safe Level</label>
-                  <input
-                    type="number"
-                    value={maxNoise}
-                    onChange={(e) => setMaxNoise(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 text-sm"
-                    min="0"
-                    max="120"
-                    step="1"
-                  />
-                </div>
-              </div>
+            {/* Noise Level */}
+            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-lg p-3 shadow-sm">
+              <h5 className="text-xs font-semibold text-slate-700">Noise Level (dB)</h5>
+              <input
+                type="number"
+                value={noiseMax}
+                onChange={(e) => setNoiseMax(Number(e.target.value))}
+                placeholder="Max"
+                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
+              />
             </div>
 
-            {/* AQI Threshold */}
-            <div>
-              <h5 className="text-xs font-semibold text-slate-600 mb-3">Air Quality (AQI)</h5>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-slate-500">Max Acceptable</label>
-                  <input
-                    type="number"
-                    value={maxAQI}
-                    onChange={(e) => setMaxAQI(Number(e.target.value))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 text-sm"
-                    min="0"
-                    max="200"
-                    step="1"
-                  />
-                </div>
-              </div>
+            {/* Air Quality */}
+            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-lg p-3 shadow-sm">
+              <h5 className="text-xs font-semibold text-slate-700">Air Quality (AQI)</h5>
+              <input
+                type="number"
+                value={aqiMax}
+                onChange={(e) => setAqiMax(Number(e.target.value))}
+                placeholder="Max"
+                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
+              />
             </div>
+          </div>
+
+          {/* Save Button */}
+          <div className="mt-6">
+            <button
+              onClick={handleSaveSettings}
+              className="w-full py-3 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors shadow-md"
+            >
+              Save Settings
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {showToast && (
+        <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 bg-emerald-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50 max-w-sm md:w-auto">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="font-medium">Settings Saved!</span>
+        </div>
+      )}
     </Card>
   );
 };
