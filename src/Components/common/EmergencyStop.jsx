@@ -19,7 +19,7 @@ const EmergencyStop = ({ onStop }) => {
           : 'bg-gradient-to-r from-red-600 to-red-700 hover:shadow-red-500/50 active:scale-[0.99]'
       }`}
     >
-      {isPressed ? '⚠️ EMERGENCY STOP ACTIVATED' : '⚠️ Emergency Stop'}
+      {isPressed ? '⚠️ EMERGENCY STOP ACTIVATED' : 'Emergency Stop'}
     </button>
   );
 };
