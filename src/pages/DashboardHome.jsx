@@ -84,41 +84,64 @@ const DashboardHome = () => {
       <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'production' ? (
-          <div className="space-y-6">
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <KpiCard
-                title="Daily Production"
-                value={data.production.daily}
-                unit="units"
-                trend={12.5}
-                icon="📦"
-              />
-              <KpiCard
-                title="Target Production"
-                value={data.production.target}
-                unit="units"
-                icon="🎯"
-              />
-              <KpiCard
-                title="Overall Efficiency"
-                value={data.production.efficiency}
-                unit="%"
-                trend={-2.1}
-                icon="⚡"
-              />
+          <div className="space-y-8">
+            {/* Section Title */}
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-slate-900 uppercase tracking-wide">
+                Real Time - Productions and Logistics
+              </h2>
+            </div>
+
+            {/* KPI Cards - Centered */}
+            <div className="flex justify-center">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full">
+                <KpiCard
+                  title="Daily Production"
+                  value={data.production.daily}
+                  unit="units"
+                  trend={12.5}
+                  icon="📦"
+                />
+                <KpiCard
+                  title="Target Production"
+                  value={data.production.target}
+                  unit="units"
+                  icon="🎯"
+                />
+                <KpiCard
+                  title="Overall Efficiency"
+                  value={data.production.efficiency}
+                  unit="%"
+                  trend={-2.1}
+                  icon="⚡"
+                />
+              </div>
+            </div>
+
+            {/* Production Log Section */}
+            <div className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Recent Production Log - Live Scan Feed
+                </h3>
+              </div>
+              <ProductionLog logs={DUMMY_PRODUCTION_LOGS} />
+            </div>
+
+            {/* Historical Analysis Section */}
+            <div className="space-y-4">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-slate-900 uppercase tracking-wide">
+                  Historical Analysis - Productions and Logistics
+                </h2>
+              </div>
+              <ProductionChart data={DUMMY_PRODUCTION_TREND} />
             </div>
 
             {/* Emergency Stop Button */}
             <EmergencyStop onStop={handleEmergencyStop} />
-
-            {/* Production Chart */}
-            <ProductionChart data={DUMMY_PRODUCTION_TREND} />
-
-            {/* Production Log */}
-            <ProductionLog logs={DUMMY_PRODUCTION_LOGS} />
           </div>
         ) : (
           <div className="space-y-6">
