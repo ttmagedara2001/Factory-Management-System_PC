@@ -1,7 +1,7 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import Card from '../../common/Card';
 
-const ProductionChart = ({ data }) => {
+const ProductionChart = ({ data, variant = 'default', className = '' }) => {
   const handleExportCSV = () => {
     const csvContent = [
       ['Day', 'Production', 'Target'],
@@ -18,12 +18,15 @@ const ProductionChart = ({ data }) => {
   };
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-slate-800">Production vs. Time</h3>
+    <Card variant={variant} className={`space-y-3 ${className}`}>
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold text-slate-800">Production vs. Time</h3>
+          <p className="text-xs text-slate-500">Daily output compared to target</p>
+        </div>
         <button
           onClick={handleExportCSV}
-          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
+          className="px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
         >
           Export .csv
         </button>
