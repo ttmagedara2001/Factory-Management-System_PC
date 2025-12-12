@@ -2,19 +2,19 @@
 
 A professional factory monitoring dashboard built with React, Tailwind CSS, and Recharts.
 
-## 📁 Component Structure
+## 📁 Components Structure
 
 ```
 src/
-├── components/
-│   ├── common/                  # Reusable UI components
+├── Componentss/
+│   ├── common/                  # Reusable UI Componentss
 │   │   ├── Card.jsx             # White container with shadow
 │   │   ├── Badge.jsx            # Status pills (Running/Fault/Idle)
 │   │   ├── Button.jsx           # Standard buttons (primary/secondary/danger)
 │   │   ├── ToggleSwitch.jsx     # iOS-style toggle switches
 │   │   └── EmergencyStop.jsx    # Prominent red emergency stop button
 │   │
-│   ├── layout/                  # Layout components
+│   ├── layout/                  # Layout Componentss
 │   │   ├── Header.jsx           # Logo, UserID, Device Selector, Factory Status
 │   │   └── TabNavigation.jsx    # Tab switching (Production/Machine)
 │
@@ -35,9 +35,9 @@ src/
 │   └── useFactoryData.js        # API data fetching hook
 │
 ├── pages/
-│   └── DashboardHome.jsx        # Main dashboard page (assembles all components)
+│   └── DashboardHome.jsx        # Main dashboard page (assembles all Componentss)
 │
-└── App.jsx                      # Root component
+└── App.jsx                      # Root Components
 ```
 
 ## 🎨 Design System
@@ -131,7 +131,7 @@ Replace these in `DashboardHome.jsx` with your actual data sources.
 ## 📝 Notes
 
 - All Tailwind classes follow the professional light theme design system
-- Components are fully reusable and modular
+- Componentss are fully reusable and modular
 - Charts use Recharts library for smooth, responsive visualizations
 - Emergency stop button includes animation and disabled state
 - Toggle switches feature iOS-style design with smooth transitions

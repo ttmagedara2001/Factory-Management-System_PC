@@ -83,14 +83,14 @@ npm run preview
 ```
 Factory-Management-System_PC/
 ├── src/
-│   ├── components/
-│   │   ├── common/           # Reusable UI components
+│   ├── Componentss/
+│   │   ├── common/           # Reusable UI Componentss
 │   │   │   ├── Card.jsx
 │   │   │   ├── Badge.jsx
 │   │   │   ├── Button.jsx
 │   │   │   ├── ToggleSwitch.jsx
 │   │   │   └── EmergencyStop.jsx
-│   │   ├── layout/           # Layout components
+│   │   ├── layout/           # Layout Componentss
 │   │   │   ├── Header.jsx
 │   │   │   └── TabNavigation.jsx
 │   │   ├── icons/            # Professional SVG icons
@@ -115,7 +115,7 @@ Factory-Management-System_PC/
 │   │   └── useFactoryData.js
 │   ├── pages/                # Main pages
 │   │   └── DashboardHome.jsx
-│   ├── App.jsx               # Root component
+│   ├── App.jsx               # Root Components
 │   ├── main.jsx              # Entry point
 │   └── index.css             # Global styles
 ├── public/                   # Static assets
@@ -132,10 +132,10 @@ Factory-Management-System_PC/
 - **Build Tool**: Vite 7.2.4
 - **Styling**: Tailwind CSS 4.1.17
 - **Charts**: Recharts 3.5.1
-- **Icons**: Custom SVG components
+- **Icons**: Custom SVG Componentss
 - **Linting**: ESLint 9.39.1
 
-## 🎯 Key Components
+## 🎯 Key Componentss
 
 ### Dashboard Tabs
 
@@ -229,14 +229,14 @@ This project is licensed under the MIT License.
 
 - React team for the amazing framework
 - Tailwind CSS for the utility-first CSS framework
-- Recharts for beautiful chart components
+- Recharts for beautiful chart Componentss
 - Vite for lightning-fast development experience
 
 ## 📚 Documentation
 
 For detailed documentation, see:
 
-- [Components Documentation](./COMPONENTS_README.md)
+- [Componentss Documentation](./ComponentsS_README.md)
 - [Tailwind Setup Guide](./TAILWIND_SETUP.md)
 - [Chart Enhancements](./CHART_ENHANCEMENTS.md)
 
