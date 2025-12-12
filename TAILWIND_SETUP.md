@@ -82,9 +82,9 @@ Custom scrollbar styles in `index.css` for a polished look:
 - System font stack for optimal performance
 - Monospace for code/RFID tags
 
-## 🔧 Component Guidelines
+## 🔧 Components Guidelines
 
-All components use Tailwind utility classes. Example patterns:
+All Componentss use Tailwind utility classes. Example patterns:
 
 ```jsx
 // Cards
