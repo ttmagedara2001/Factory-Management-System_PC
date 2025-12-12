@@ -19,43 +19,15 @@ const TemperatureDisplay = ({ temperature = 0, unit = '°C', trend = 0 }) => {
   };
 
   return (
-    <Card>
-      <div className="space-y-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-sm font-medium text-slate-500 mb-2">Temperature</h3>
-            <div className="flex items-baseline">
-              <span className={`text-4xl font-bold ${getTemperatureColor()}`}>
-                {validTemp.toFixed(1)}
-              </span>
-              <span className="text-lg text-slate-500 ml-2">{unit}</span>
-            </div>
-            {validTrend !== 0 && (
-              <p className={`text-sm mt-2 ${validTrend > 0 ? 'text-red-600' : 'text-blue-600'}`}>
-                {validTrend > 0 ? '↑' : '↓'} {Math.abs(validTrend).toFixed(1)}{unit} from baseline
-              </p>
-            )}
-          </div>
-          <div className={`${getTemperatureColor()}`}>
-            <ThermometerIcon className="w-8 h-8" />
-          </div>
+    <div className="bg-white rounded-xl p-10 shadow-md hover:shadow-lg transition-all duration-300 border-t-4 border-red-400 relative overflow-hidden">
+      <div className="flex flex-col items-center justify-center text-center space-y-2">
+        <div className="text-4xl font-bold text-slate-800">
+          {validTemp.toFixed(1)}
+          <span className="text-xl text-slate-600 ml-1">{unit}</span>
         </div>
-
-        {/* Temperature Bar */}
-        <div className="space-y-2">
-          <div className="flex justify-between text-xs text-slate-400">
-            <span>0{unit}</span>
-            <span>50{unit}</span>
-          </div>
-          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all duration-500 ${getBarColor()}`}
-              style={{ width: `${Math.min((validTemp / 50) * 100, 100)}%` }}
-            />
-          </div>
-        </div>
+        <div className="text-sm text-slate-500 font-medium uppercase tracking-wide">Temperature</div>
       </div>
-    </Card>
+    </div>
   );
 };
 

@@ -1,36 +1,25 @@
 import Card from '../../common/Card';
-import { ProductionIcon, TargetIcon, BoltIcon } from '../../icons/SensorIcons';
 
-const KpiCard = ({ title, value, unit, trend, icon }) => {
-  const getIconComponent = () => {
-    if (icon === '📦') return <ProductionIcon className="w-10 h-10" />;
-    if (icon === '🎯') return <TargetIcon className="w-10 h-10" />;
-    if (icon === '⚡') return <BoltIcon className="w-10 h-10" />;
-    return null;
-  };
+const KpiCard = ({ title, value, unit, trend }) => {
+  const trendColor = trend > 0 ? 'text-emerald-600' : 'text-red-600';
+  const trendIcon = trend > 0 ? '▲' : '▼';
 
   return (
-    <Card>
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-sm text-slate-500 mb-1">{title}</p>
-          <p className="text-3xl font-bold text-slate-800">
-            {value}
-            {unit && <span className="text-xl text-slate-500 ml-1">{unit}</span>}
-          </p>
-          {trend && (
-            <p className={`text-sm mt-2 ${trend > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-              {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}% from yesterday
-            </p>
-          )}
+    <div className="bg-white rounded-xl p-10 shadow-md hover:shadow-lg transition-all duration-300 border-t-4 border-slate-400 relative overflow-hidden">
+      <div className="flex flex-col items-center justify-center text-center space-y-3">
+        <div className="text-4xl font-bold text-slate-800">
+          {value}
+          {unit && <span className="text-xl text-slate-600 ml-1">{unit}</span>}
         </div>
-        {icon && (
-          <div className="text-slate-400">
-            {getIconComponent()}
+        <div className="text-sm text-slate-500 font-medium uppercase tracking-wide">{title}</div>
+        {trend !== undefined && (
+          <div className={`text-sm font-semibold ${trendColor} flex items-center gap-1`}>
+            <span>{trendIcon}</span>
+            <span>{Math.abs(trend)}% vs yesterday</span>
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 };
 
