@@ -19,60 +19,16 @@ const VibrationGauge = ({ value, max = 10, unit = 'mm/s' }) => {
   };
 
   return (
-    <Card>
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`${getTextColor()}`}>
-          <VibrationIcon className="w-5 h-5" />
+    <div className="bg-white rounded-xl p-10 shadow-md hover:shadow-lg transition-all duration-300 border-t-4 border-red-400 relative overflow-hidden">
+      <div className="flex flex-col items-center justify-center text-center space-y-2">
+        <div className="text-4xl font-bold text-slate-800">
+          {value.toFixed(1)}
+          <span className="text-xl text-slate-600 ml-1">{unit}</span>
         </div>
-        <h3 className="text-sm font-medium text-slate-500">Vibration Level</h3>
+        <div className="text-sm text-slate-500 font-medium uppercase tracking-wide">Vibration Level</div>
+        <div className="text-xs text-slate-400">Max: {max} {unit}</div>
       </div>
-      <div className="flex items-center justify-between">
-        {/* Gauge */}
-        <div className="relative w-24 h-12">
-          <svg viewBox="0 0 200 100" className="w-full h-full">
-            {/* Background arc */}
-            <path
-              d="M 20 90 A 80 80 0 0 1 180 90"
-              fill="none"
-              stroke="#e2e8f0"
-              strokeWidth="10"
-              strokeLinecap="round"
-            />
-            {/* Progress arc */}
-            <path
-              d="M 20 90 A 80 80 0 0 1 180 90"
-              fill="none"
-              stroke={getColor()}
-              strokeWidth="10"
-              strokeLinecap="round"
-              strokeDasharray={`${percentage * 2.51} 251`}
-            />
-            {/* Needle */}
-            <line
-              x1="100"
-              y1="90"
-              x2="100"
-              y2="30"
-              stroke="#1e293b"
-              strokeWidth="2"
-              strokeLinecap="round"
-              transform={`rotate(${rotation} 100 90)`}
-            />
-            {/* Center dot */}
-            <circle cx="100" cy="90" r="4" fill="#1e293b" />
-          </svg>
-        </div>
-        
-        {/* Value display */}
-        <div className="text-right">
-          <p className="text-3xl font-bold text-slate-800">
-            {value.toFixed(1)}
-            <span className="text-lg text-slate-500 ml-1">{unit}</span>
-          </p>
-          <p className="text-xs text-slate-400 mt-1">Max: {max} {unit}</p>
-        </div>
-      </div>
-    </Card>
+    </div>
   );
 };
 

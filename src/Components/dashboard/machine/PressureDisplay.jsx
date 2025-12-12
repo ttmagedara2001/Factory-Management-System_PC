@@ -4,37 +4,18 @@ import { PressureIcon } from '../../icons/SensorIcons';
 
 const PressureDisplay = ({ pressure, unit = 'bar', airQuality = 'Good' }) => {
   return (
-    <Card>
-      <div className="space-y-4">
-        {/* Hydraulic Pressure */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="text-blue-600">
-              <PressureIcon className="w-5 h-5" />
-            </div>
-            <h3 className="text-sm font-medium text-slate-500">Hydraulic Pressure</h3>
-          </div>
-          <div className="flex items-baseline">
-            <span className="text-4xl font-bold text-slate-800">{pressure.toFixed(1)}</span>
-            <span className="text-lg text-slate-500 ml-2">{unit}</span>
-          </div>
-          <div className="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-linear-to-r from-emerald-500 to-emerald-600"
-              style={{ width: `${(pressure / 10) * 100}%` }}
-            />
-          </div>
+    <div className="bg-white rounded-xl p-10 shadow-md hover:shadow-lg transition-all duration-300 border-t-4 border-red-400 relative overflow-hidden">
+      <div className="flex flex-col items-center justify-center text-center space-y-2">
+        <div className="text-4xl font-bold text-slate-800">
+          {pressure.toFixed(1)}
+          <span className="text-xl text-slate-600 ml-1">{unit}</span>
         </div>
-
-        {/* Air Quality */}
-        <div className="pt-4 border-t border-slate-200">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-slate-500">Air Quality</h3>
-            <Badge status={airQuality.toLowerCase()}>{airQuality}</Badge>
-          </div>
+        <div className="text-sm text-slate-500 font-medium uppercase tracking-wide">Hydraulic Pressure</div>
+        <div className="text-xs text-slate-400 mt-1">
+          Air Quality: <span className="font-semibold">{airQuality}</span>
         </div>
       </div>
-    </Card>
+    </div>
   );
 };
 

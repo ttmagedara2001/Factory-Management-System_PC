@@ -56,7 +56,7 @@ const ControlsPanel = ({ motorState, onMotorStateChange, emergencyStopActive }) 
   };
 
   return (
-    <Card className="space-y-8 text-center max-w-5xl mx-auto">
+    <Card className="space-y-8 text-center w-full">
       <div className="space-y-2">
         <h3 className="text-xl font-bold text-slate-900 tracking-tight">Control Panel & Configuration</h3>
         <p className="text-sm text-slate-500">
