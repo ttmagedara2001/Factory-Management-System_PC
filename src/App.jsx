@@ -17,7 +17,6 @@ export default function App() {
   const [isConnecting, setIsConnecting] = useState(true);
   const [selectedDevice, setSelectedDevice] = useState(MOCK_DEVICES[0].id);
   const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
-  const [alertCount, setAlertCount] = useState(0);
   
   // Real-time sensor data from MQTT
   const [sensorData, setSensorData] = useState({
@@ -42,23 +41,24 @@ export default function App() {
     co2: { min: 0, max: 70 }
   });
 
-  // WebSocket initialization (waits for auth state from main.jsx)
+  // WebSocket initialization (auto-login already handled in main.jsx)
   useEffect(() => {
     const initializeWebSocket = async () => {
       try {
-        // Wait for auth state to be set by main.jsx AutoLogin
-        if (!auth?.jwtToken) {
-          console.warn('⚠️ [App] No JWT token in auth state yet. Waiting for auto-login...');
-          setIsConnecting(true);
+        // Get JWT token from localStorage (set by main.jsx AutoLogin)
+        const jwtToken = localStorage.getItem('jwtToken');
+        
+        if (!jwtToken) {
+          console.error('❌ [App] No JWT token found. WebSocket cannot connect.');
+          setIsConnecting(false);
           return;
         }
         
-        console.log('📡 [App] Auth ready. Initializing WebSocket connection...');
-        console.log('🔑 [App] JWT Token exists:', auth.jwtToken ? 'YES' : 'NO');
+        console.log('📡 [App] Initializing WebSocket connection...');
         
         // Set up WebSocket callbacks
         webSocketClient.onConnect(() => {
-          console.log('✅ [App] WebSocket connected successfully');
+          console.log('✅ [App] WebSocket connected');
           setIsWebSocketConnected(true);
           setIsConnecting(false);
         });
@@ -68,35 +68,28 @@ export default function App() {
           setIsWebSocketConnected(false);
         });
         
-        // Connect to WebSocket using auth state token
-        console.log('🔌 [App] Calling webSocketClient.connect()...');
-        await webSocketClient.connect(auth.jwtToken);
+        // Connect to WebSocket
+        await webSocketClient.connect(jwtToken);
         
         console.log('✅ [App] WebSocket initialization complete');
-        
-        // Timeout safety - if not connected after 10 seconds, show error
-        setTimeout(() => {
-          if (!webSocketClient.isConnected) {
-            console.error('❌ [App] WebSocket connection timeout after 10s');
-            setIsConnecting(false);
-            setIsWebSocketConnected(false);
-          }
-        }, 10000);
         
       } catch (error) {
         console.error('❌ [App] WebSocket initialization failed:', error);
         setIsConnecting(false);
-        setIsWebSocketConnected(false);
       }
     };
     
-    initializeWebSocket();
+    // Wait a bit for auto-login to complete in main.jsx
+    const timer = setTimeout(() => {
+      initializeWebSocket();
+    }, 500);
     
     // Cleanup on unmount
     return () => {
+      clearTimeout(timer);
       webSocketClient.disconnect();
     };
-  }, [auth?.jwtToken]);
+  }, []);
   
   // Subscribe to selected device when it changes
   useEffect(() => {
@@ -142,32 +135,6 @@ export default function App() {
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
           <p className="text-slate-600 font-semibold">Connecting to Factory Systems...</p>
           <p className="text-sm text-slate-400 mt-2">Initializing MQTT connection</p>
-          {!auth?.jwtToken && (
-            <p className="text-xs text-orange-500 mt-3">⏳ Waiting for authentication...</p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Show error if connection failed
-  if (!isWebSocketConnected && !isConnecting) {
-    return (
-      <div className="flex h-screen bg-[#F1F5F9] items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="text-red-500 mb-4">
-            <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <p className="text-slate-700 font-semibold mb-2">Connection Failed</p>
-          <p className="text-sm text-slate-500 mb-4">Unable to connect to factory systems. Check console for details.</p>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-          >
-            Retry Connection
-          </button>
         </div>
       </div>
     );
@@ -194,13 +161,12 @@ export default function App() {
           devices={MOCK_DEVICES}
           selectedDevice={selectedDevice}
           onDeviceChange={handleDeviceChange}
-          alertCount={alertCount}
         />
         
         <main className="flex-1 overflow-y-auto relative">
           {activeTab === 'dashboard' && <Dashboard bellClicked={bellClicked} thresholds={thresholds} sensorData={sensorData} webSocketClient={webSocketClient} selectedDevice={selectedDevice} />}
           {activeTab === 'settings' && <SettingsWindow thresholds={thresholds} setThresholds={setThresholds} currentValues={sensorData} webSocketClient={webSocketClient} selectedDevice={selectedDevice} />}
-          {activeTab === 'historical' && <HistoricalWindow selectedDevice={selectedDevice} />}
+          {activeTab === 'historical' && <HistoricalWindow />}
           
           {/* Notification Sidebar */}
           {showNotifications && (
