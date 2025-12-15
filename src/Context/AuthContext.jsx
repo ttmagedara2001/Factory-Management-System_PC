@@ -22,9 +22,18 @@ export const AuthProvider = ({ children }) => {
   const setAuth = ({ userId, jwtToken }) => {
     setUserId(userId);
     setJwtToken(jwtToken);
-    localStorage.setItem('jwtToken', jwtToken);
-    localStorage.setItem('userId', userId);
-    console.log('✅ Auth state updated:', { userId, hasToken: !!jwtToken });
+    
+    // Only store valid tokens
+    if (jwtToken && jwtToken !== 'null' && jwtToken !== 'undefined') {
+      localStorage.setItem('jwtToken', jwtToken);
+      localStorage.setItem('userId', userId);
+      console.log('✅ Auth state updated:', { userId, hasToken: true });
+    } else {
+      // Clear storage if null token
+      localStorage.removeItem('jwtToken');
+      localStorage.removeItem('userId');
+      console.log('⚠️ Auth state cleared: No valid token');
+    }
   };
 
   const logout = () => {
