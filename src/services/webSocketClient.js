@@ -2,10 +2,10 @@ import { Client } from "@stomp/stompjs";
 
 // Mock devices for the factory
 export const MOCK_DEVICES = [
-  { id: "device9988", name: "Machine A - Line 1" },
-  { id: "device0011233", name: "Machine B - Line 2" },
-  { id: "device7654", name: "Machine C - Line 3" },
-  { id: "device3421", name: "Machine D - Line 4" },
+  { id: 'device9988', name: 'Machine A - Line 1' },
+  { id: 'device0011233', name: 'Machine B - Line 2' },
+  { id: 'device7654', name: 'Machine C - Line 3' },
+  { id: 'device3421', name: 'Machine D - Line 4' }
 ];
 
 // Get JWT token from localStorage (set by login process)
@@ -112,22 +112,10 @@ class WebSocketClient {
       return;
     }
 
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("🔌 [WebSocketClient] Initializing STOMP Client");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
     const wsUrl = buildWebSocketUrl(token);
     if (!wsUrl) {
-      console.error("❌ Failed to build WebSocket URL - invalid token");
       throw new Error("Failed to build WebSocket URL - invalid token");
     }
-
-    console.log("📋 Connection Details:");
-    console.log("   • Protocol: WSS (Secure WebSocket)");
-    console.log("   • Host: api.protonestconnect.co");
-    console.log("   • Path: /ws");
-    console.log("   • Auth: JWT Token (query parameter)");
-    console.log("");
 
     this.client = new Client({
       brokerURL: wsUrl,
@@ -136,11 +124,7 @@ class WebSocketClient {
       heartbeatOutgoing: 4000,
 
       onConnect: (frame) => {
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.log("✅ WebSocket Connected Successfully!");
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.log("📡 Connection Frame:", frame);
-        console.log("");
+        console.log("✅ WebSocket Connected:", frame);
         this.isReady = true;
 
         // If we have a device already set, subscribe to it
@@ -155,48 +139,28 @@ class WebSocketClient {
       },
 
       onStompError: (frame) => {
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.error("❌ STOMP Protocol Error");
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.error("Broker reported error:", frame.headers["message"]);
+        console.error("❌ Broker reported error:", frame.headers["message"]);
         console.error("Details:", frame.body);
-        console.log("");
       },
 
       onWebSocketError: (event) => {
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.error("🚫 WebSocket Connection Error");
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.error("Event:", event);
-        console.error("Possible causes:");
-        console.error("   • Invalid JWT token");
-        console.error("   • Token expired");
-        console.error("   • Network connectivity issues");
-        console.error("   • Server unavailable");
-        console.log("");
+        console.error("🚫 WebSocket error", event);
       },
 
       onWebSocketClose: (event) => {
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.warn("🔻 WebSocket Connection Closed");
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.warn("Code:", event.code);
-        console.warn("Reason:", event.reason || "No reason provided");
-        console.log("");
+        console.warn("🔻 WebSocket closed", event);
         this.isReady = false;
         if (this.disconnectCallback) {
           this.disconnectCallback();
         }
       },
 
-      debug: (msg) => console.log("🪵 [STOMP]:", msg),
+      debug: (msg) => console.log("🪵 Debug:", msg),
     });
 
     // Activate the client
-    console.log("⏳ Activating STOMP client...");
     this.client.activate();
-    console.log("✅ STOMP client activated - waiting for connection...");
-    console.log("");
+    console.log("[WebSocketClient] STOMP client activated");
   }
 
   /**
