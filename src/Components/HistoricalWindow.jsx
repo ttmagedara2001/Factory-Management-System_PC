@@ -1,12 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { History, Calendar, Download, Filter, Search, TrendingUp, AlertTriangle, Eye, EyeOff, X } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, CartesianGrid } from 'recharts';
 import FactoryStatus from './FactoryStatus';
-import { getStreamDataForDevice } from '../services/deviceService';
-import { saveSensorData, getSensorData } from '../services/localStorageService';
-import { MOCK_DEVICES } from '../services/webSocketClient';
 
-const HistoricalWindow = ({ selectedDevice }) => {
+const HistoricalWindow = () => {
   const [dateRange, setDateRange] = useState('24h');
   const [granularity, setGranularity] = useState('hourly');
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,8 +15,6 @@ const HistoricalWindow = ({ selectedDevice }) => {
   const [customGranularity, setCustomGranularity] = useState('hourly');
   const [exportDateRange, setExportDateRange] = useState('current');
   const [exportCustomRange, setExportCustomRange] = useState({ start: '', end: '' });
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(null);
   const [selectedCharts, setSelectedCharts] = useState({
     production: true,
     oee: true,
@@ -44,135 +39,13 @@ const HistoricalWindow = ({ selectedDevice }) => {
     noise: true
   });
 
-  // Data arrays - populated from API and localStorage
-  const [machinePerformanceData, setMachinePerformanceData] = useState([]);
-  const [environmentalData, setEnvironmentalData] = useState([]);
-  const [productionData, setProductionData] = useState([]);
-  const [oeeData, setOeeData] = useState([]);
-  const [downtimeData, setDowntimeData] = useState([]);
-  const [eventLogData, setEventLogData] = useState([]);
-
-  // Get device ID (use selectedDevice prop or first device)
-  const deviceId = selectedDevice || MOCK_DEVICES[0].id;
-
-  // Fetch historical data from API
-  const fetchHistoricalData = async () => {
-    setIsLoading(true);
-    try {
-      console.log('📊 Fetching historical data for:', deviceId);
-      
-      // Calculate time range based on dateRange
-      const now = new Date();
-      const endTime = now.toISOString();
-      let startTime;
-      
-      switch(dateRange) {
-        case '24h':
-          startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-          break;
-        case '7d':
-          startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-          break;
-        case '30d':
-          startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-          break;
-        case 'custom':
-          if (customStartDate && customEndDate) {
-            startTime = new Date(customStartDate).toISOString();
-            endTime = new Date(customEndDate).toISOString();
-          } else {
-            startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-          }
-          break;
-        default:
-          startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-      }
-
-      // Fetch data from API
-      const response = await getStreamDataForDevice(deviceId, startTime, endTime, 0, 1000);
-      
-      if (response.status === 'Success' && response.data) {
-        const apiData = response.data;
-        
-        // Save to localStorage
-        apiData.forEach(dataPoint => {
-          saveSensorData(dataPoint);
-        });
-
-        // Transform data for charts
-        const transformedData = apiData.map(point => ({
-          time: new Date(point.timestamp).toLocaleTimeString(),
-          timestamp: point.timestamp,
-          temperature: parseFloat(point.temperature) || null,
-          humidity: parseFloat(point.humidity) || null,
-          co2: parseFloat(point.co2) || null,
-          vibration: parseFloat(point.vibration) || null,
-          pressure: parseFloat(point.pressure) || null,
-          noise: parseFloat(point.noise) || null,
-          aqi: parseFloat(point.aqi) || null,
-          units: parseInt(point.units) || 0
-        }));
-
-        // Update state
-        setEnvironmentalData(transformedData);
-        setMachinePerformanceData(transformedData);
-        setProductionData(transformedData.map(d => ({ time: d.time, units: d.units })));
-        
-        // Calculate OEE (simplified)
-        setOeeData(transformedData.map(d => ({
-          time: d.time,
-          oee: 75 + Math.random() * 15 // Placeholder calculation
-        })));
-
-        setLastUpdate(new Date());
-        console.log('✅ Historical data loaded:', transformedData.length, 'records');
-      } else {
-        // Fallback to localStorage
-        const storedData = getSensorData();
-        if (storedData.length > 0) {
-          console.log('📦 Using cached data from localStorage:', storedData.length, 'records');
-          const transformedData = storedData.map(point => ({
-            time: new Date(point.timestamp).toLocaleTimeString(),
-            timestamp: point.timestamp,
-            ...point
-          }));
-          setEnvironmentalData(transformedData);
-          setMachinePerformanceData(transformedData);
-        }
-      }
-    } catch (error) {
-      console.error('❌ Failed to fetch historical data:', error);
-      // Try to load from localStorage as fallback
-      const storedData = getSensorData();
-      if (storedData.length > 0) {
-        console.log('📦 Loading from localStorage cache...');
-        const transformedData = storedData.map(point => ({
-          time: new Date(point.timestamp).toLocaleTimeString(),
-          timestamp: point.timestamp,
-          ...point
-        }));
-        setEnvironmentalData(transformedData);
-        setMachinePerformanceData(transformedData);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Fetch data on mount and when dateRange/device changes
-  useEffect(() => {
-    fetchHistoricalData();
-  }, [dateRange, deviceId]);
-
-  // Auto-refresh every 30 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      console.log('🔄 Auto-refreshing historical data...');
-      fetchHistoricalData();
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(interval);
-  }, [dateRange, deviceId]);
+  // Data arrays - to be populated from real API/WebSocket connections
+  const machinePerformanceData = [];
+  const environmentalData = [];
+  const productionData = [];
+  const oeeData = [];
+  const downtimeData = [];
+  const eventLogData = [];
 
   const toggleEnvMetric = (metric) => {
     setEnvVisibility(prev => ({
@@ -303,13 +176,7 @@ const HistoricalWindow = ({ selectedDevice }) => {
       <div className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-3">
           <History size={28} className="text-slate-600" />
-          <div>
-            <h1 className="text-xl font-bold text-slate-800 uppercase tracking-wide">Historical Data Analysis</h1>
-            <p className="text-xs text-slate-500 mt-1">
-              {isLoading ? 'Loading data...' : `Last updated: ${lastUpdate ? lastUpdate.toLocaleTimeString() : 'Never'}`}
-              {' • '}Auto-refreshes every 30s
-            </p>
-          </div>
+          <h1 className="text-xl font-bold text-slate-800 uppercase tracking-wide">Historical Data Analysis</h1>
         </div>
         <FactoryStatus />
       </div>
