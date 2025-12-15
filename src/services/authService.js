@@ -56,7 +56,12 @@ export const login = async (email, password) => {
         timeout: 10000,
       });
 
-      console.log("📡 API Response from /get-token (Success):", response.data);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("📡 HTTP Response from /get-token API");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("✅ Status Code:", response.status, response.statusText);
+      console.log("📋 Response Data:", JSON.stringify(response.data, null, 2));
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
       // Check for successful response according to API docs
       if (response.data.status === "Success") {
@@ -70,6 +75,13 @@ export const login = async (email, password) => {
         console.log(
           "✅ Login successful via /get-token. JWT token received securely."
         );
+        console.log(
+          "🎫 JWT Token (first 30 chars):",
+          jwtToken.substring(0, 30) + "..."
+        );
+        console.log("🔄 Refresh Token:", refreshToken ? "YES" : "NO");
+        console.log("");
+
         return { jwtToken, refreshToken, userId: cleanEmail };
       } else {
         throw new Error(
