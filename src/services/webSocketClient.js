@@ -1,5 +1,13 @@
 import { Client } from "@stomp/stompjs";
 
+// Mock devices for the factory
+export const MOCK_DEVICES = [
+  { id: "device9988", name: "Machine A - Line 1" },
+  { id: "device0011233", name: "Machine B - Line 2" },
+  { id: "device7654", name: "Machine C - Line 3" },
+  { id: "device3421", name: "Machine D - Line 4" },
+];
+
 // Get JWT token from localStorage (set by login process)
 const getJwtToken = () => {
   const token = localStorage.getItem("jwtToken");
@@ -32,8 +40,44 @@ const buildWebSocketUrl = (jwtToken) => {
   return wsUrl;
 };
 
-// Create STOMP client (will be configured when connect() is called)
-let client = null;
+/**
+ * Calculate Air Quality Index based on temperature, humidity, and CO2
+ * @param {number} temperature - Temperature in Celsius
+ * @param {number} humidity - Humidity percentage
+ * @param {number} co2 - CO2 percentage
+ * @returns {number} Air Quality Index (0-100)
+ */
+const calculateAQI = (temperature, humidity, co2) => {
+  if (temperature === null || humidity === null || co2 === null) {
+    return null;
+  }
+
+  // AQI calculation formula
+  // Optimal conditions: temp ~22°C, humidity ~40-60%, CO2 <40%
+
+  // Temperature component (optimal: 20-24°C)
+  const tempOptimal = 22;
+  const tempDeviation = Math.abs(temperature - tempOptimal);
+  const tempScore = Math.max(0, 100 - tempDeviation * 5);
+
+  // Humidity component (optimal: 40-60%)
+  let humidityScore;
+  if (humidity >= 40 && humidity <= 60) {
+    humidityScore = 100;
+  } else if (humidity < 40) {
+    humidityScore = Math.max(0, 100 - (40 - humidity) * 2);
+  } else {
+    humidityScore = Math.max(0, 100 - (humidity - 60) * 2);
+  }
+
+  // CO2 component (optimal: <30%)
+  const co2Score = Math.max(0, 100 - co2 * 2);
+
+  // Weighted average: temp 30%, humidity 30%, CO2 40%
+  const aqi = tempScore * 0.3 + humidityScore * 0.3 + co2Score * 0.4;
+
+  return Math.round(aqi);
+};
 
 /**
  * WebSocket Client Wrapper Class for Dashboard Integration
@@ -49,6 +93,13 @@ class WebSocketClient {
     this.disconnectCallback = null;
     this.isReady = false;
     this.jwtToken = null;
+
+    // Store sensor data for AQI calculation
+    this.sensorData = {
+      temperature: null,
+      humidity: null,
+      co2: null,
+    };
   }
 
   /**
@@ -61,10 +112,22 @@ class WebSocketClient {
       return;
     }
 
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("🔌 [WebSocketClient] Initializing STOMP Client");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
     const wsUrl = buildWebSocketUrl(token);
     if (!wsUrl) {
+      console.error("❌ Failed to build WebSocket URL - invalid token");
       throw new Error("Failed to build WebSocket URL - invalid token");
     }
+
+    console.log("📋 Connection Details:");
+    console.log("   • Protocol: WSS (Secure WebSocket)");
+    console.log("   • Host: api.protonestconnect.co");
+    console.log("   • Path: /ws");
+    console.log("   • Auth: JWT Token (query parameter)");
+    console.log("");
 
     this.client = new Client({
       brokerURL: wsUrl,
@@ -73,7 +136,11 @@ class WebSocketClient {
       heartbeatOutgoing: 4000,
 
       onConnect: (frame) => {
-        console.log("✅ WebSocket Connected:", frame);
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("✅ WebSocket Connected Successfully!");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📡 Connection Frame:", frame);
+        console.log("");
         this.isReady = true;
 
         // If we have a device already set, subscribe to it
@@ -88,28 +155,48 @@ class WebSocketClient {
       },
 
       onStompError: (frame) => {
-        console.error("❌ Broker reported error:", frame.headers["message"]);
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.error("❌ STOMP Protocol Error");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.error("Broker reported error:", frame.headers["message"]);
         console.error("Details:", frame.body);
+        console.log("");
       },
 
       onWebSocketError: (event) => {
-        console.error("🚫 WebSocket error", event);
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.error("🚫 WebSocket Connection Error");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.error("Event:", event);
+        console.error("Possible causes:");
+        console.error("   • Invalid JWT token");
+        console.error("   • Token expired");
+        console.error("   • Network connectivity issues");
+        console.error("   • Server unavailable");
+        console.log("");
       },
 
       onWebSocketClose: (event) => {
-        console.warn("🔻 WebSocket closed", event);
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.warn("🔻 WebSocket Connection Closed");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.warn("Code:", event.code);
+        console.warn("Reason:", event.reason || "No reason provided");
+        console.log("");
         this.isReady = false;
         if (this.disconnectCallback) {
           this.disconnectCallback();
         }
       },
 
-      debug: (msg) => console.log("🪵 Debug:", msg),
+      debug: (msg) => console.log("🪵 [STOMP]:", msg),
     });
 
     // Activate the client
+    console.log("⏳ Activating STOMP client...");
     this.client.activate();
-    console.log("[WebSocketClient] STOMP client activated");
+    console.log("✅ STOMP client activated - waiting for connection...");
+    console.log("");
   }
 
   /**
@@ -135,7 +222,7 @@ class WebSocketClient {
 
     // Subscribe to each stream sensor topic individually
     streamSensors.forEach((sensor) => {
-      const streamTopic = `protonest/${deviceId}/stream/${sensor}`;
+      const streamTopic = `protonest/${deviceId}/stream/fcm/${sensor}`;
       const streamSub = this.client.subscribe(streamTopic, (message) => {
         const data = JSON.parse(message.body);
         console.log(`📡 [${deviceId}] Received ${sensor} data:`, data);
@@ -185,11 +272,44 @@ class WebSocketClient {
             console.log(
               `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${value}`
             );
+
+            // Store sensor data for AQI calculation
+            const numValue = parseFloat(value);
+            if (sensor === "temperature") {
+              self.sensorData.temperature = numValue;
+            } else if (sensor === "humidity") {
+              self.sensorData.humidity = numValue;
+            } else if (sensor === "co2") {
+              self.sensorData.co2 = numValue;
+            }
+
             self.dataCallback({
               sensorType: sensorType,
-              value: value,
+              value: numValue,
               timestamp: data.timestamp || new Date().toISOString(),
             });
+
+            // Calculate and send AQI if we have all required values
+            if (
+              sensor === "temperature" ||
+              sensor === "humidity" ||
+              sensor === "co2"
+            ) {
+              const aqi = calculateAQI(
+                self.sensorData.temperature,
+                self.sensorData.humidity,
+                self.sensorData.co2
+              );
+
+              if (aqi !== null && self.dataCallback) {
+                console.log(`📊 [${deviceId}] Calculated AQI: ${aqi}`);
+                self.dataCallback({
+                  sensorType: "airQuality",
+                  value: aqi,
+                  timestamp: data.timestamp || new Date().toISOString(),
+                });
+              }
+            }
           } else {
             console.warn(
               `⚠️ [${deviceId}] Could not extract value for ${sensor} from message:`,
@@ -212,7 +332,7 @@ class WebSocketClient {
 
     // Subscribe to each state topic individually
     stateSuffixes.forEach((stateSuffix) => {
-      const stateTopic = `protonest/${deviceId}/state/${stateSuffix}`;
+      const stateTopic = `protonest/${deviceId}/state/fcm/${stateSuffix}`;
       const stateSub = this.client.subscribe(stateTopic, (message) => {
         const data = JSON.parse(message.body);
         console.log(`🔧 [${deviceId}] ${stateSuffix} received:`, data);
@@ -401,7 +521,7 @@ class WebSocketClient {
       return false;
     }
 
-    const destination = `protonest/${deviceIdParam}/state/machine_control`;
+    const destination = `protonest/${deviceIdParam}/state/fcm/machine_control`;
     const payload = { machine_control: control.toUpperCase() };
 
     if (mode) {
@@ -433,7 +553,7 @@ class WebSocketClient {
       return false;
     }
 
-    const destination = `protonest/${deviceIdParam}/state/ventilation_mode`;
+    const destination = `protonest/${deviceIdParam}/state/fcm/ventilation_mode`;
     const payload = { ventilation_mode: mode.toLowerCase() };
 
     try {
@@ -502,7 +622,7 @@ class WebSocketClient {
         return false;
       }
 
-      const destination = `protonest/${this.currentDeviceId}/stream/${sensorType}`;
+      const destination = `protonest/${this.currentDeviceId}/stream/fcm/${sensorType}`;
       const payload = { [sensorType]: String(value) };
 
       try {
