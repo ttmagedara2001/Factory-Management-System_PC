@@ -41,6 +41,9 @@ export default function App() {
     co2: { min: 0, max: 70 }
   });
 
+  // Alerts state for notification count
+  const [alerts, setAlerts] = useState([]);
+
   // WebSocket initialization (auto-login already handled in main.jsx)
   useEffect(() => {
     const initializeWebSocket = async () => {
@@ -140,6 +143,20 @@ export default function App() {
     );
   }
 
+  // Example: Add alert when temperature exceeds threshold (replace with real logic)
+  useEffect(() => {
+    if (sensorData.temperature !== null && sensorData.temperature > (thresholds.temperature?.max ?? 35)) {
+      setAlerts((prev) => [
+        ...prev,
+        {
+          msg: `Temperature Critical: ${sensorData.temperature}°C exceeds max threshold`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+    }
+    // Add similar logic for other sensor critical alerts as needed
+  }, [sensorData.temperature, thresholds.temperature]);
+
   return (
     <div className="flex h-screen bg-[#F1F5F9] font-sans text-slate-900 overflow-hidden">
       <SidePanel 
@@ -161,6 +178,7 @@ export default function App() {
           devices={MOCK_DEVICES}
           selectedDevice={selectedDevice}
           onDeviceChange={handleDeviceChange}
+          alertsCount={alerts.length}
         />
         
         <main className="flex-1 overflow-y-auto relative">
