@@ -2,10 +2,10 @@ import { Client } from "@stomp/stompjs";
 
 // Mock devices for the factory
 export const MOCK_DEVICES = [
-  { id: 'device9988', name: 'Machine A - Line 1' },
-  { id: 'device0011233', name: 'Machine B - Line 2' },
-  { id: 'device7654', name: 'Machine C - Line 3' },
-  { id: 'device3421', name: 'Machine D - Line 4' }
+  { id: "device9988", name: "Machine A - Line 1" },
+  { id: "device0011233", name: "Machine B - Line 2" },
+  { id: "device7654", name: "Machine C - Line 3" },
+  { id: "device3421", name: "Machine D - Line 4" },
 ];
 
 // Get JWT token from localStorage (set by login process)
@@ -186,7 +186,7 @@ class WebSocketClient {
 
     // Subscribe to each stream sensor topic individually
     streamSensors.forEach((sensor) => {
-      const streamTopic = `protonest/${deviceId}/stream/fcm/${sensor}`;
+      const streamTopic = `protonest/${deviceId}/stream/fmc/${sensor}`;
       const streamSub = this.client.subscribe(streamTopic, (message) => {
         const data = JSON.parse(message.body);
         console.log(`📡 [${deviceId}] Received ${sensor} data:`, data);
@@ -296,7 +296,7 @@ class WebSocketClient {
 
     // Subscribe to each state topic individually
     stateSuffixes.forEach((stateSuffix) => {
-      const stateTopic = `protonest/${deviceId}/state/fcm/${stateSuffix}`;
+      const stateTopic = `protonest/${deviceId}/state/fmc/${stateSuffix}`;
       const stateSub = this.client.subscribe(stateTopic, (message) => {
         const data = JSON.parse(message.body);
         console.log(`🔧 [${deviceId}] ${stateSuffix} received:`, data);
@@ -485,7 +485,7 @@ class WebSocketClient {
       return false;
     }
 
-    const destination = `protonest/${deviceIdParam}/state/fcm/machine_control`;
+    const destination = `protonest/${deviceIdParam}/state/fmc/machine_control`;
     const payload = { machine_control: control.toUpperCase() };
 
     if (mode) {
@@ -517,7 +517,7 @@ class WebSocketClient {
       return false;
     }
 
-    const destination = `protonest/${deviceIdParam}/state/fcm/ventilation_mode`;
+    const destination = `protonest/${deviceIdParam}/state/fmc/ventilation_mode`;
     const payload = { ventilation_mode: mode.toLowerCase() };
 
     try {
@@ -586,7 +586,7 @@ class WebSocketClient {
         return false;
       }
 
-      const destination = `protonest/${this.currentDeviceId}/stream/fcm/${sensorType}`;
+      const destination = `protonest/${this.currentDeviceId}/stream/fmc/${sensorType}`;
       const payload = { [sensorType]: String(value) };
 
       try {
