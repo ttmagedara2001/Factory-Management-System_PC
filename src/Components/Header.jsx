@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, User, ChevronDown, Menu } from 'lucide-react';
 import { useAuth } from '../Context/AuthContext';
 
-const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotifications, devices, selectedDevice, onDeviceChange }) => {
+const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotifications, devices, selectedDevice, onDeviceChange, alertsCount = 0 }) => {
   const { auth } = useAuth();
   
   // Extract username from email (before @) or use full userId
@@ -96,6 +96,7 @@ const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotif
         <div className="w-8 h-8 bg-slate-300 rounded-full flex items-center justify-center text-slate-600">
           <User size={20} />
         </div>
+        {/* Username from auto-login (auth.userId) */}
         <span className="text-slate-700 font-semibold text-sm">{username}</span>
       </div>
 
@@ -109,9 +110,11 @@ const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotif
         <Bell size={24} className={`transition-colors duration-300 ${
           showNotifications ? 'text-yellow-600' : 'text-slate-700 group-hover:text-yellow-500'
         }`} />
-        <span className="absolute -top-1 -right-1 bg-[#FCD34D] text-slate-900 text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#DCEBF5]">
-          2
-        </span>
+        {alertsCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-[#FCD34D] text-slate-900 text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#DCEBF5]">
+            {alertsCount}
+          </span>
+        )}
       </button>
       </div>
     </header>
