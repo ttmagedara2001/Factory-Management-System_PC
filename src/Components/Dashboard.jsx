@@ -1,164 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import RealTimeWindow from './RealTimeWindow';
 import FactoryStatus from './FactoryStatus';
 
 
-
-// Helper: Get start of today (12am) and end of today (next 12am)
-function getTodayWindow() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-  return { start, end };
-}
-
-function isInTodayWindow(date) {
-  const { start, end } = getTodayWindow();
-  return date >= start && date < end;
-}
+const productionData = [];
+const logData = [];
 
 
 const Dashboard = ({ bellClicked, thresholds, sensorData, webSocketClient, selectedDevice, onDeviceChange, devices, alerts, setAlerts }) => {
-  // --- Production Counter and Log State ---
-  const [unitCount, setUnitCount] = useState(0);
-  const [productionLog, setProductionLog] = useState([]);
-  const [yesterdayCount, setYesterdayCount] = useState(0);
-  const logRef = useRef([]);
+  // No local device selection; use selectedDevice prop only
 
-  // --- Load from localStorage on mount (per device, per day) ---
-  useEffect(() => {
-    if (!selectedDevice) return;
-    const key = `unit_counter_${selectedDevice}`;
-    const logKey = `unit_log_${selectedDevice}`;
-    const raw = localStorage.getItem(key);
-    const logRaw = localStorage.getItem(logKey);
-    let count = 0;
-    let log = [];
-    // Today
-    const todayStr = new Date().toISOString().slice(0, 10);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.date === todayStr) {
-          count = parsed.count;
-        }
-      } catch {}
-    }
-    if (logRaw) {
-      try {
-        const parsed = JSON.parse(logRaw);
-        // Only keep today's logs
-        log = parsed.filter(l => isInTodayWindow(new Date(l.timestamp)));
-      } catch {}
-    }
-    setUnitCount(count);
-    setProductionLog(log);
-    logRef.current = log;
-
-    // Yesterday
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yKey = `unit_counter_${selectedDevice}`;
-    let yCount = 0;
-    const yRaw = localStorage.getItem(yKey);
-    const yStr = yesterday.toISOString().slice(0, 10);
-    if (yRaw) {
-      try {
-        const parsed = JSON.parse(yRaw);
-        if (parsed && parsed.date === yStr) {
-          yCount = parsed.count;
-        }
-      } catch {}
-    }
-    setYesterdayCount(yCount);
-  }, [selectedDevice]);
-
-  // --- Listen for real-time unit stream data ---
-  useEffect(() => {
-    if (!webSocketClient || !selectedDevice) return;
-    // Handler for unit stream
-    const handleUnitStream = (data) => {
-      // Only handle if data is for this device and is a unit stream
-      if (data.sensorType === 'units' && data.value && typeof data.value === 'object') {
-        const { tagId, productName } = data.value;
-        if (!tagId || !productName) return;
-        // Add to log and increment counter
-        const now = new Date();
-        let updatedLog;
-        if (!isInTodayWindow(now)) {
-          // New day, reset
-          setUnitCount(1);
-          updatedLog = [{ tagId, productName, timestamp: now.toISOString() }];
-          setProductionLog(updatedLog);
-          localStorage.setItem(`unit_counter_${selectedDevice}`, JSON.stringify({ date: now.toISOString().slice(0, 10), count: 1 }));
-          localStorage.setItem(`unit_log_${selectedDevice}`, JSON.stringify(updatedLog));
-          logRef.current = updatedLog;
-        } else {
-          setUnitCount(prev => {
-            const newCount = prev + 1;
-            localStorage.setItem(`unit_counter_${selectedDevice}`, JSON.stringify({ date: now.toISOString().slice(0, 10), count: newCount }));
-            return newCount;
-          });
-          setProductionLog(prev => {
-            updatedLog = [{ tagId, productName, timestamp: now.toISOString() }, ...prev];
-            localStorage.setItem(`unit_log_${selectedDevice}`, JSON.stringify(updatedLog));
-            logRef.current = updatedLog;
-            return updatedLog;
-          });
-        }
-        // Dispatch a custom event for real-time update in HistoricalWindow
-        window.dispatchEvent(new CustomEvent('unitLogUpdated', { detail: { deviceId: selectedDevice, log: updatedLog || logRef.current } }));
-      }
-    };
-    // Register callback
-    const origCallback = webSocketClient.dataCallback;
-    webSocketClient.dataCallback = (data) => {
-      if (origCallback) origCallback(data);
-      handleUnitStream(data);
-    };
-    return () => {
-      webSocketClient.dataCallback = origCallback;
-    };
-  }, [webSocketClient, selectedDevice]);
-
-  // --- Reset at midnight ---
-  useEffect(() => {
-    const now = new Date();
-    const msToMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0) - now;
-    const timeout = setTimeout(() => {
-      setUnitCount(0);
-      setProductionLog([]);
-      if (selectedDevice) {
-        localStorage.setItem(`unit_counter_${selectedDevice}`, JSON.stringify({ date: new Date().toISOString().slice(0, 10), count: 0 }));
-        localStorage.setItem(`unit_log_${selectedDevice}`, JSON.stringify([]));
-      }
-    }, msToMidnight + 1000);
-    return () => clearTimeout(timeout);
-  }, [selectedDevice]);
-
-  // --- Format log for table ---
-  const logData = productionLog.map(row => {
-    const d = new Date(row.timestamp);
-    return {
-      date: d.toLocaleDateString(),
-      time: d.toLocaleTimeString(),
-      tag: row.tagId,
-      product: row.productName
-    };
-  });
-
-  // --- Calculate percent change ---
-  let percentChange = 0;
-  if (yesterdayCount > 0) {
-    percentChange = ((unitCount - yesterdayCount) / yesterdayCount) * 100;
-  } else if (unitCount > 0) {
-    percentChange = 100;
-  }
-  const percentChangeStr = `${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(1)}%`;
-
-  // --- Main Render ---
   return (
     <div className="p-8 max-w-[1600px] mx-auto">
 
@@ -187,11 +40,11 @@ const Dashboard = ({ bellClicked, thresholds, sensorData, webSocketClient, selec
             {/* Daily Production */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
               <h3 className="text-[10px] font-bold text-slate-500 uppercase mb-2">Daily Production</h3>
-              <div className="text-4xl font-extrabold text-slate-800 mb-2">{unitCount}</div>
+              <div className="text-4xl font-extrabold text-slate-800 mb-2">{sensorData?.units ?? '--'}</div>
               <div className="flex items-center gap-2">
-                <div className={`flex items-center text-xs font-bold bg-green-50 px-1 rounded ${percentChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                <div className="flex items-center text-green-500 text-xs font-bold bg-green-50 px-1 rounded">
                   <TrendingUp size={12} className="mr-1"/>
-                  {percentChangeStr}
+                  +2.3%
                 </div>
                 <span className="text-[10px] text-slate-400 font-bold uppercase">Target 1024 Units</span>
               </div>
@@ -250,24 +103,45 @@ const Dashboard = ({ bellClicked, thresholds, sensorData, webSocketClient, selec
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {logData.length === 0 ? (
-                    <tr><td colSpan={4} className="text-center text-slate-400 py-4">No production logs for today</td></tr>
-                  ) : (
-                    logData.map((row, i) => (
-                      <tr key={i} className="hover:bg-slate-50 text-slate-600 font-medium">
-                        <td className="p-2 pl-3 whitespace-nowrap">{row.date}</td>
-                        <td className="p-2 whitespace-nowrap">{row.time}</td>
-                        <td className="p-2 whitespace-nowrap">{row.tag}</td>
-                        <td className="p-2 truncate max-w-[120px]">{row.product}</td>
-                      </tr>
-                    ))
-                  )}
+                  {logData.map((row, i) => (
+                    <tr key={i} className="hover:bg-slate-50 text-slate-600 font-medium">
+                      <td className="p-2 pl-3 whitespace-nowrap">{row.date}</td>
+                      <td className="p-2 whitespace-nowrap">{row.time}</td>
+                      <td className="p-2 whitespace-nowrap">{row.tag}</td>
+                      <td className="p-2 truncate max-w-[120px]">{row.product}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Overall Efficiency Chart removed: productionData is not defined. Add chart logic if needed. */}
+          {/* Overall Efficiency Chart */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+            <h3 className="text-[10px] font-bold text-slate-800 uppercase mb-6">Overall Efficiency</h3>
+            <div className="h-40 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={productionData}>
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fontSize: 10, fill: '#94a3b8'}}
+                    interval="preserveStartEnd"
+                  />
+                  <Tooltip />
+                  <Line 
+                    type="monotone" 
+                    dataKey="value" 
+                    stroke="#60A5FA" 
+                    strokeWidth={3} 
+                    dot={{r: 0}}
+                    activeDot={{r: 4}}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
 
           {/* Active Alerts (only for selected device, filtered in App.jsx) */}
           <div 
@@ -275,17 +149,11 @@ const Dashboard = ({ bellClicked, thresholds, sensorData, webSocketClient, selec
             className={`bg-white p-6 rounded-xl shadow-sm border border-slate-100 transition-all duration-500 ${
               bellClicked ? 'ring-4 ring-yellow-400 ring-opacity-75 shadow-2xl shadow-yellow-200' : ''
             }`}
-            style={{ maxHeight: '260px', overflowY: 'auto' }}
           >
             <h3 className="text-[10px] font-bold text-slate-800 uppercase mb-4">Active Alerts</h3>
             <div className="space-y-3">
               {alerts && alerts.length > 0 ? (
-                // Only show one alert per unique sensorType, value, and deviceId
-                Array.from(
-                  new Map(
-                    alerts.map(a => [a.sensorType + '_' + a.value + '_' + a.deviceId, a])
-                  ).values()
-                ).map((alert, i) => (
+                alerts.slice(0, 5).map((alert, i) => (
                   <div key={i} className={`flex justify-between items-start p-3 rounded-md border-l-4 ${alert.severity === 'critical' ? 'bg-red-50 border-red-500' : alert.severity === 'warning' ? 'bg-yellow-50 border-yellow-500' : 'bg-[#FEF3C7] border-[#FBBF24]'}`}>
                     <p className={`text-[10px] font-bold leading-tight w-3/4 ${alert.severity === 'critical' ? 'text-red-900' : alert.severity === 'warning' ? 'text-yellow-900' : 'text-slate-700'}`}>
                       {alert.msg}

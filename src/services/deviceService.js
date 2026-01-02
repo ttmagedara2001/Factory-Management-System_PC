@@ -3,7 +3,7 @@
 // ============================================
 // HTTP API service layer for ProtoNest backend integration
 // Handles all REST API calls for sensor data and machine control
-// Base URL: https://api.protonestconnect.co/api/v1/user
+// Uses API URL from api.js (do not hardcode BASE_URL)
 //
 // Architecture:
 // - api.js: Axios instance with JWT interceptors
@@ -26,7 +26,7 @@
 // - ventilation_mode: auto/manual ventilation control
 // ============================================
 
-import api from "./api";
+import api from "./api.js";
 
 // ============================================
 // PRIMARY API FUNCTIONS - FACTORY SYSTEM
@@ -188,7 +188,7 @@ export const getStateDetailsForDevice = async (deviceId) => {
  * - ventilation_mode: Switch between auto/manual ventilation
  *
  * The backend forwards these updates to the MQTT broker,
- * which publishes to: protonest/<deviceId>/state/<topic>
+ * which publishes to: protonest/<deviceId>/state/fmc/<topic>
  *
  * Used by: ControlsPanel for machine start/stop and ventilation control
  *

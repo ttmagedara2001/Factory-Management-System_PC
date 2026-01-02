@@ -1,23 +1,11 @@
-// Helper: Get start of today (12am) and end of today (next 12am)
-function getTodayWindow() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-  return { start, end };
-}
-
-function isInTodayWindow(date) {
-  const { start, end } = getTodayWindow();
-  return date >= start && date < end;
-}
 import React, { useState, useMemo, useEffect } from 'react';
 import { History, Calendar, Download, Filter, Search, TrendingUp, AlertTriangle, Eye, EyeOff, X } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, CartesianGrid } from 'recharts';
 import FactoryStatus from './FactoryStatus';
 
-import { getSensorDataGrouped } from '../services/localStorageService';
 
-const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice, setSelectedDevice }) => {
+
+const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice, setSelectedDevice, sensorHistory = {} }) => {
   const [dateRange, setDateRange] = useState('24h');
   const [granularity, setGranularity] = useState('hourly');
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,7 +47,6 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
     const [productionData, setProductionData] = useState([]);
     const [oeeData, setOeeData] = useState([]);
     const [downtimeData, setDowntimeData] = useState([]);
-    const [unitLog, setUnitLog] = useState([]);
     const eventLogData = alerts.map(alert => ({
       timestamp: alert.time,
       severity: alert.severity || 'info',
@@ -68,92 +55,75 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
       code: alert.sensorType || '',
     }));
 
-    // Fetch historical data from localStorage every 30s and update unitLog in real time
+    // Derive historical data from in-memory sensorHistory every 30s
     useEffect(() => {
       let intervalId;
       const fetchHistoricalData = () => {
-        // Get grouped sensor data for the selected device
-        const grouped = getSensorDataGrouped(selectedDevice);
-        // Machine performance: vibration, pressure, noise
+        const raw = sensorHistory[selectedDevice] || {};
+        const grouped = {
+          vibration: raw.vibration || [],
+          pressure: raw.pressure || [],
+          noise: raw.noise || [],
+          temperature: raw.temperature || [],
+          humidity: raw.humidity || [],
+          co2: raw.co2 || [],
+          aqi: raw.aqi || [],
+          units: raw.units || [],
+        };
+
         const machineData = [];
         const envData = [];
         const prodData = [];
         const oeeDataArr = [];
-        if (grouped) {
-          // Assume all arrays are sorted newest first
-          const length = Math.max(
-            grouped.vibration?.length || 0,
-            grouped.pressure?.length || 0,
-            grouped.noise?.length || 0,
-            grouped.temperature?.length || 0,
-            grouped.humidity?.length || 0,
-            grouped.co2?.length || 0,
-            grouped.aqi?.length || 0,
-            grouped.units?.length || 0
-          );
-          for (let i = 0; i < length; i++) {
-            // Find the closest timestamp for each metric
-            const time = grouped.vibration?.[i]?.timestamp || grouped.pressure?.[i]?.timestamp || grouped.noise?.[i]?.timestamp || grouped.temperature?.[i]?.timestamp;
-            machineData.push({
-              time,
-              vibration: grouped.vibration?.[i]?.value,
-              pressure: grouped.pressure?.[i]?.value,
-              noise: grouped.noise?.[i]?.value,
-            });
-            envData.push({
-              time,
-              temperature: grouped.temperature?.[i]?.value,
-              humidity: grouped.humidity?.[i]?.value,
-              co2: grouped.co2?.[i]?.value,
-              aqi: grouped.aqi?.[i]?.value,
-            });
-            prodData.push({
-              date: time ? time.slice(0, 10) : '',
-              produced: grouped.units?.[i]?.value,
-              target: 1024,
-            });
-            oeeDataArr.push({
-              week: time ? time.slice(0, 10) : '',
-              oee: 90 + Math.random() * 5 // Example OEE, replace with real if available
-            });
-          }
+
+        // Assume arrays are newest-first
+        const length = Math.max(
+          grouped.vibration.length,
+          grouped.pressure.length,
+          grouped.noise.length,
+          grouped.temperature.length,
+          grouped.humidity.length,
+          grouped.co2.length,
+          grouped.aqi.length,
+          grouped.units.length
+        );
+
+        for (let i = 0; i < length; i++) {
+          const time = grouped.vibration[i]?.timestamp || grouped.pressure[i]?.timestamp || grouped.noise[i]?.timestamp || grouped.temperature[i]?.timestamp || '';
+          machineData.push({
+            time,
+            vibration: grouped.vibration[i]?.value,
+            pressure: grouped.pressure[i]?.value,
+            noise: grouped.noise[i]?.value,
+          });
+          envData.push({
+            time,
+            temperature: grouped.temperature[i]?.value,
+            humidity: grouped.humidity[i]?.value,
+            co2: grouped.co2[i]?.value,
+            aqi: grouped.aqi[i]?.value,
+          });
+          prodData.push({
+            date: time ? time.slice(0, 10) : '',
+            produced: grouped.units[i]?.value,
+            target: 1024,
+          });
+          oeeDataArr.push({
+            week: time ? time.slice(0, 10) : '',
+            oee: 90 + Math.random() * 5
+          });
         }
+
         setMachinePerformanceData(machineData);
         setEnvironmentalData(envData);
         setProductionData(prodData);
         setOeeData(oeeDataArr);
-
-        // --- Sync unit log from Dashboard (tagId, productName, timestamp) ---
-        if (selectedDevice) {
-          const logKey = `unit_log_${selectedDevice}`;
-          const logRaw = localStorage.getItem(logKey);
-          let log = [];
-          if (logRaw) {
-            try {
-              const parsed = JSON.parse(logRaw);
-              // Only keep today's logs
-              log = parsed.filter(l => isInTodayWindow(new Date(l.timestamp)));
-            } catch {}
-          }
-          setUnitLog(log);
-        }
       };
+
       fetchHistoricalData();
       intervalId = setInterval(fetchHistoricalData, 30000);
-
-      // Listen for real-time unit log updates from Dashboard
-      const handleUnitLogUpdate = (e) => {
-        if (e.detail && e.detail.deviceId === selectedDevice) {
-          setUnitLog(e.detail.log);
-        }
-      };
-      window.addEventListener('unitLogUpdated', handleUnitLogUpdate);
-
-      return () => {
-        clearInterval(intervalId);
-        window.removeEventListener('unitLogUpdated', handleUnitLogUpdate);
-      };
-    }, [selectedDevice]);
+      return () => clearInterval(intervalId);
+    }, [selectedDevice, sensorHistory]);
 
   const toggleEnvMetric = (metric) => {
     setEnvVisibility(prev => ({

@@ -1,13 +1,5 @@
 import { Client } from "@stomp/stompjs";
 
-// Mock devices for the factory
-export const MOCK_DEVICES = [
-  { id: "device9988", name: "Machine A - Line 1" },
-  { id: "device0011233", name: "Machine B - Line 2" },
-  { id: "device7654", name: "Machine C - Line 3" },
-  { id: "device3421", name: "Machine D - Line 4" },
-];
-
 // Get JWT token from localStorage (set by login process)
 const getJwtToken = () => {
   const token = localStorage.getItem("jwtToken");
@@ -40,44 +32,8 @@ const buildWebSocketUrl = (jwtToken) => {
   return wsUrl;
 };
 
-/**
- * Calculate Air Quality Index based on temperature, humidity, and CO2
- * @param {number} temperature - Temperature in Celsius
- * @param {number} humidity - Humidity percentage
- * @param {number} co2 - CO2 percentage
- * @returns {number} Air Quality Index (0-100)
- */
-const calculateAQI = (temperature, humidity, co2) => {
-  if (temperature === null || humidity === null || co2 === null) {
-    return null;
-  }
-
-  // AQI calculation formula
-  // Optimal conditions: temp ~22°C, humidity ~40-60%, CO2 <40%
-
-  // Temperature component (optimal: 20-24°C)
-  const tempOptimal = 22;
-  const tempDeviation = Math.abs(temperature - tempOptimal);
-  const tempScore = Math.max(0, 100 - tempDeviation * 5);
-
-  // Humidity component (optimal: 40-60%)
-  let humidityScore;
-  if (humidity >= 40 && humidity <= 60) {
-    humidityScore = 100;
-  } else if (humidity < 40) {
-    humidityScore = Math.max(0, 100 - (40 - humidity) * 2);
-  } else {
-    humidityScore = Math.max(0, 100 - (humidity - 60) * 2);
-  }
-
-  // CO2 component (optimal: <30%)
-  const co2Score = Math.max(0, 100 - co2 * 2);
-
-  // Weighted average: temp 30%, humidity 30%, CO2 40%
-  const aqi = tempScore * 0.3 + humidityScore * 0.3 + co2Score * 0.4;
-
-  return Math.round(aqi);
-};
+// Create STOMP client (will be configured when connect() is called)
+let client = null;
 
 /**
  * WebSocket Client Wrapper Class for Dashboard Integration
@@ -93,13 +49,6 @@ class WebSocketClient {
     this.disconnectCallback = null;
     this.isReady = false;
     this.jwtToken = null;
-
-    // Store sensor data for AQI calculation
-    this.sensorData = {
-      temperature: null,
-      humidity: null,
-      co2: null,
-    };
   }
 
   /**
@@ -127,7 +76,51 @@ class WebSocketClient {
         console.log("✅ WebSocket Connected:", frame);
         this.isReady = true;
 
-        // If we have a device already set, subscribe to it
+        // Subscribe to MQTTX-style topics for the current device
+        if (this.currentDeviceId) {
+          // /topic/stream/{deviceId}
+          const streamTopic = `/topic/stream/${this.currentDeviceId}`;
+          this.client.subscribe(streamTopic, (message) => {
+            const data = JSON.parse(message.body);
+            console.log("📡 Received:", data);
+            // Forward to dashboard dataCallback if available
+            if (this.dataCallback && typeof data === "object") {
+              // If the message is a batch of sensor values, update all
+              Object.keys(data).forEach((sensorType) => {
+                if (sensorType !== "timestamp") {
+                  this.dataCallback({
+                    sensorType,
+                    value: data[sensorType],
+                    timestamp: data.timestamp || new Date().toISOString(),
+                  });
+                }
+              });
+            }
+          });
+          console.log(`🔔 Subscribed to ${streamTopic}`);
+
+          // /topic/state/{deviceId}
+          const stateTopic = `/topic/state/${this.currentDeviceId}`;
+          this.client.subscribe(stateTopic, (message) => {
+            const data = JSON.parse(message.body);
+            console.log("📡 Received:", data);
+            // Forward to dashboard dataCallback if available
+            if (this.dataCallback && typeof data === "object") {
+              Object.keys(data).forEach((sensorType) => {
+                if (sensorType !== "timestamp") {
+                  this.dataCallback({
+                    sensorType,
+                    value: data[sensorType],
+                    timestamp: data.timestamp || new Date().toISOString(),
+                  });
+                }
+              });
+            }
+          });
+          console.log(`🔔 Subscribed to ${stateTopic}`);
+        }
+
+        // If we have a device already set, subscribe to per-sensor topics as before
         if (this.currentDeviceId) {
           this._subscribeToDeviceTopics(this.currentDeviceId);
         }
@@ -165,203 +158,149 @@ class WebSocketClient {
 
   /**
    * Subscribe to device topics dynamically
-   * Format: protonest/<deviceId>/<topic>/<suffix>
    * @param {string} deviceId - Device ID to subscribe to
    */
   _subscribeToDeviceTopics(deviceId) {
     const self = this;
 
-    // Define all stream sensor suffixes to subscribe to
+    // Define the sensors to subscribe to (as per user request)
     const streamSensors = [
       "vibration",
       "pressure",
       "temperature",
-      "humidity",
       "noise",
-      "aqi",
-      "pm25",
+      "humidity",
       "co2",
-      "units",
+      "units", // production units count
     ];
 
-    // Subscribe to each stream sensor topic individually
+    // Subscribe to each sensor topic: protonest/<deviceId>/stream/fmc/<sensor>
     streamSensors.forEach((sensor) => {
       const streamTopic = `protonest/${deviceId}/stream/fmc/${sensor}`;
       const streamSub = this.client.subscribe(streamTopic, (message) => {
         const data = JSON.parse(message.body);
         console.log(`📡 [${deviceId}] Received ${sensor} data:`, data);
 
-        // Extract value from message payload and call Dashboard callback
         if (self.dataCallback) {
-          // Message structure: {payload: {vibration: "5.2"}, timestamp: "..."}
+          // Accept both {payload: {...}, ...} and flat {sensor: ...}
           const payload = data.payload || data;
-
-          // Factory sensor mapping
-          const sensorMap = {
-            vibration: "vibration",
-            pressure: "pressure",
-            temperature: "temperature",
-            temp: "temperature",
-            units: "units",
-            humidity: "humidity",
-            moisture: "humidity",
-            noise: "noiseLevel",
-            airQuality: "airQuality",
-            aqi: "aqi",
-            pm25: "pm25",
-            co2: "co2",
-          };
-
-          // Extract sensor value from payload (since we subscribed to individual topic)
-          // The topic tells us which sensor this is
-          const sensorType = sensorMap[sensor] || sensor;
           let value = null;
-
-          // Try to find the sensor value in payload
           if (payload[sensor] !== undefined) {
             value = payload[sensor];
           } else if (payload.value !== undefined) {
             value = payload.value;
-          } else {
-            // Fallback: Check all possible sensor fields
-            for (const [key, mappedType] of Object.entries(sensorMap)) {
-              if (payload[key] !== undefined && mappedType === sensorType) {
-                value = payload[key];
-                break;
-              }
+          } else if (
+            typeof payload === "object" &&
+            Object.keys(payload).length === 1 &&
+            payload[sensor] !== undefined
+          ) {
+            value = payload[sensor];
+          }
+
+          // Convert to number for numeric sensors
+          const numericSensors = [
+            "vibration",
+            "pressure",
+            "temperature",
+            "noise",
+            "humidity",
+            "co2",
+            "units",
+          ];
+          if (value !== null && numericSensors.includes(sensor)) {
+            const numValue = Number(value);
+            if (!isNaN(numValue)) {
+              value = numValue;
             }
           }
 
           if (value !== null) {
-            console.log(
-              `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${value}`
-            );
-
-            // Store sensor data for AQI calculation
-            const numValue = parseFloat(value);
-            if (sensor === "temperature") {
-              self.sensorData.temperature = numValue;
-            } else if (sensor === "humidity") {
-              self.sensorData.humidity = numValue;
-            } else if (sensor === "co2") {
-              self.sensorData.co2 = numValue;
-            }
-
             self.dataCallback({
-              sensorType: sensorType,
-              value: numValue,
+              sensorType: sensor,
+              value: value,
               timestamp: data.timestamp || new Date().toISOString(),
             });
-
-            // Calculate and send AQI if we have all required values
-            if (
-              sensor === "temperature" ||
-              sensor === "humidity" ||
-              sensor === "co2"
-            ) {
-              const aqi = calculateAQI(
-                self.sensorData.temperature,
-                self.sensorData.humidity,
-                self.sensorData.co2
-              );
-
-              if (aqi !== null && self.dataCallback) {
-                console.log(`📊 [${deviceId}] Calculated AQI: ${aqi}`);
-                self.dataCallback({
-                  sensorType: "airQuality",
-                  value: aqi,
-                  timestamp: data.timestamp || new Date().toISOString(),
-                });
-              }
-            }
           } else {
             console.warn(
               `⚠️ [${deviceId}] Could not extract value for ${sensor} from message:`,
               data
             );
           }
-        } else {
-          console.warn(
-            `⚠️ [${deviceId}] No callback registered yet - ${sensor} data will be lost:`,
-            data
-          );
         }
       });
       this.subscriptions.set(`stream-${deviceId}-${sensor}`, streamSub);
       console.log(`🔔 Subscribed to ${streamTopic}`);
     });
 
-    // Define all state suffixes to subscribe to
-    const stateSuffixes = ["machine_control", "ventilation_mode"];
-
-    // Subscribe to each state topic individually
-    stateSuffixes.forEach((stateSuffix) => {
-      const stateTopic = `protonest/${deviceId}/state/fmc/${stateSuffix}`;
-      const stateSub = this.client.subscribe(stateTopic, (message) => {
+    // Subscribe to ventilation state topic: protonest/<deviceId>/state/fmc/ventilation
+    const ventilationTopic = `protonest/${deviceId}/state/fmc/ventilation`;
+    const ventilationSub = this.client.subscribe(
+      ventilationTopic,
+      (message) => {
         const data = JSON.parse(message.body);
-        console.log(`🔧 [${deviceId}] ${stateSuffix} received:`, data);
-
-        // Extract payload (handle nested structure)
+        console.log(`🌀 [${deviceId}] Ventilation state received:`, data);
         const payload = data.payload || data;
-
-        // Extract value based on which state suffix we're subscribed to
-        let value = null;
-
-        if (stateSuffix === "ventilation_mode") {
-          value =
-            payload.ventilation_mode ||
-            payload.ventilationMode ||
-            payload.value;
-          if (value !== undefined && value !== null) {
-            value = String(value).toLowerCase();
-          }
-        } else if (stateSuffix === "machine_control") {
-          value =
-            payload.machine_control ||
-            payload.machineControl ||
-            payload.motor ||
-            payload.motorControl ||
-            payload.value;
-          if (value !== undefined && value !== null) {
-            value = String(value).toUpperCase();
+        if (self.dataCallback) {
+          const ventilationValue = payload.ventilation ?? payload.value;
+          if (ventilationValue !== undefined) {
+            self.dataCallback({
+              sensorType: "ventilation",
+              value: ventilationValue,
+              timestamp: data.timestamp || new Date().toISOString(),
+            });
           }
         }
+      }
+    );
+    this.subscriptions.set(`state-${deviceId}-ventilation`, ventilationSub);
+    console.log(`🔔 Subscribed to ${ventilationTopic}`);
 
-        // Call Dashboard callback with state data
-        if (self.dataCallback && value !== null && value !== undefined) {
-          console.log(
-            `🎯 [${deviceId}] Calling Dashboard callback: ${stateSuffix} = ${value}`
-          );
-          self.dataCallback({
-            sensorType: stateSuffix,
-            value: value,
-            timestamp: data.timestamp || new Date().toISOString(),
-          });
+    // Subscribe to machineControl state topic: protonest/<deviceId>/state/fmc/machineControl
+    const machineControlTopic = `protonest/${deviceId}/state/fmc/machineControl`;
+    const machineControlSub = this.client.subscribe(
+      machineControlTopic,
+      (message) => {
+        const data = JSON.parse(message.body);
+        console.log(`⚙️ [${deviceId}] MachineControl state received:`, data);
+        const payload = data.payload || data;
+        if (self.dataCallback) {
+          const machineControlValue = payload.machineControl ?? payload.value;
+          if (machineControlValue !== undefined) {
+            self.dataCallback({
+              sensorType: "machineControl",
+              value: machineControlValue,
+              timestamp: data.timestamp || new Date().toISOString(),
+            });
+          }
         }
-      });
-      this.subscriptions.set(`state-${deviceId}-${stateSuffix}`, stateSub);
-      console.log(`🔔 Subscribed to ${stateTopic}`);
-    });
+      }
+    );
+    this.subscriptions.set(
+      `state-${deviceId}-machineControl`,
+      machineControlSub
+    );
+    console.log(`🔔 Subscribed to ${machineControlTopic}`);
   }
 
   /**
-   * Unsubscribe from all device topics
+   * Unsubscribe from device topics
    * @param {string} deviceId - Device ID to unsubscribe from
    */
   _unsubscribeFromDeviceTopics(deviceId) {
-    // Unsubscribe from all subscriptions that match this deviceId
-    const keysToDelete = [];
+    const streamKey = `stream-${deviceId}`;
+    const stateKey = `state-${deviceId}`;
 
-    for (const [key, subscription] of this.subscriptions.entries()) {
-      if (key.includes(deviceId)) {
-        subscription.unsubscribe();
-        keysToDelete.push(key);
-        console.log(`🔕 Unsubscribed from ${key}`);
-      }
+    if (this.subscriptions.has(streamKey)) {
+      this.subscriptions.get(streamKey).unsubscribe();
+      this.subscriptions.delete(streamKey);
+      console.log(`🔕 Unsubscribed from /topic/stream/${deviceId}`);
     }
 
-    // Delete all unsubscribed keys
-    keysToDelete.forEach((key) => this.subscriptions.delete(key));
+    if (this.subscriptions.has(stateKey)) {
+      this.subscriptions.get(stateKey).unsubscribe();
+      this.subscriptions.delete(stateKey);
+      console.log(`🔕 Unsubscribed from /topic/state/${deviceId}`);
+    }
   }
 
   /**
@@ -373,25 +312,7 @@ class WebSocketClient {
       console.error(
         "[WebSocketClient] ❌ Cannot connect: No JWT token provided"
       );
-      console.error(
-        "🔧 Please ensure auto-login is successful and JWT token is stored in localStorage"
-      );
-      console.error(
-        "💡 Check main.jsx AutoLogin component and authService.js login function"
-      );
       throw new Error("JWT token required for WebSocket connection");
-    }
-
-    if (token === "MOCK_TOKEN_FOR_TESTING") {
-      console.error("[WebSocketClient] ❌ Cannot connect: Mock token detected");
-      console.error(
-        "🔧 Auto-login failed. Please verify credentials in main.jsx"
-      );
-      console.error("📧 Email: ratnaabinayansn@gmail.com");
-      console.error(
-        "🔐 Password should be your ProtoNest secretKey, not login password"
-      );
-      throw new Error("Valid JWT token required - mock token rejected");
     }
 
     this.jwtToken = token;
@@ -477,48 +398,21 @@ class WebSocketClient {
   }
 
   /**
-   * Send machine control command
+   * Send ventilation command
+   * @param {string} ventilation - "on" or "off"
+   * @param {string} mode - "manual" or "auto"
    */
-  sendMachineCommand(deviceIdParam, control, mode = null) {
+  sendVentilationCommand(ventilation, mode = "manual") {
     if (!this.isConnected) {
       console.warn("[WebSocketClient] Cannot send command - not connected");
       return false;
     }
 
-    const destination = `protonest/${deviceIdParam}/state/fmc/machine_control`;
-    const payload = { machine_control: control.toUpperCase() };
-
-    if (mode) {
-      payload.ventilation_mode = mode.toLowerCase();
-    }
-
-    try {
-      this.client.publish({
-        destination,
-        body: JSON.stringify(payload),
-      });
-      console.log(`[WebSocketClient] 📤 Sent machine command:`, payload);
-      return true;
-    } catch (error) {
-      console.error(
-        "[WebSocketClient] ❌ Failed to send machine command:",
-        error
-      );
-      return false;
-    }
-  }
-
-  /**
-   * Send ventilation mode command
-   */
-  sendVentilationCommand(deviceIdParam, mode) {
-    if (!this.isConnected) {
-      console.warn("[WebSocketClient] Cannot send command - not connected");
-      return false;
-    }
-
-    const destination = `protonest/${deviceIdParam}/state/fmc/ventilation_mode`;
-    const payload = { ventilation_mode: mode.toLowerCase() };
+    const destination = `fmc/ventilation`;
+    const payload = {
+      ventilation: ventilation.toLowerCase(),
+      mode: mode.toLowerCase(),
+    };
 
     try {
       this.client.publish({
@@ -528,7 +422,42 @@ class WebSocketClient {
       console.log(`[WebSocketClient] 📤 Sent ventilation command:`, payload);
       return true;
     } catch (error) {
-      console.error("[WebSocketClient] ❌ Failed to send pump command:", error);
+      console.error(
+        "[WebSocketClient] ❌ Failed to send ventilation command:",
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Send machine control command
+   * @param {string} command - "run" or "stop"
+   */
+  sendMachineControlCommand(command) {
+    if (!this.isConnected) {
+      console.warn("[WebSocketClient] Cannot send command - not connected");
+      return false;
+    }
+
+    const destination = `fmc/machineControl`;
+    const payload = { machineControl: command.toLowerCase() };
+
+    try {
+      this.client.publish({
+        destination,
+        body: JSON.stringify(payload),
+      });
+      console.log(
+        `[WebSocketClient] 📤 Sent machine control command:`,
+        payload
+      );
+      return true;
+    } catch (error) {
+      console.error(
+        "[WebSocketClient] ❌ Failed to send machine control command:",
+        error
+      );
       return false;
     }
   }
@@ -559,20 +488,12 @@ class WebSocketClient {
   enableTestingMode() {
     if (typeof window === "undefined") return;
 
-    window.sendMachineCommand = (control, mode = null) => {
+    window.sendPumpCommand = (power, mode = null) => {
       if (!this.currentDeviceId) {
         console.error("❌ No device selected. Subscribe to a device first.");
         return false;
       }
-      return this.sendMachineCommand(this.currentDeviceId, control, mode);
-    };
-
-    window.sendVentilationCommand = (mode) => {
-      if (!this.currentDeviceId) {
-        console.error("❌ No device selected. Subscribe to a device first.");
-        return false;
-      }
-      return this.sendVentilationCommand(this.currentDeviceId, mode);
+      return this.sendPumpCommand(this.currentDeviceId, power, mode);
     };
 
     window.simulateSensorData = (sensorType, value) => {
@@ -586,6 +507,8 @@ class WebSocketClient {
         return false;
       }
 
+      // Publish to per-sensor topic used by the app subscriptions
+      // (use /stream/fmc/<sensor> to match subscriptions)
       const destination = `protonest/${this.currentDeviceId}/stream/fmc/${sensorType}`;
       const payload = { [sensorType]: String(value) };
 
@@ -614,11 +537,9 @@ class WebSocketClient {
 
     console.log("");
     console.log("🧪 Testing Mode Enabled!");
-    console.log('   sendMachineCommand("RUN")');
-    console.log('   sendMachineCommand("STOP")');
-    console.log('   sendVentilationCommand("auto")');
-    console.log('   simulateSensorData("vibration", 5.2)');
-    console.log('   simulateSensorData("temperature", 28.5)');
+    console.log('   sendPumpCommand("on")');
+    console.log('   sendPumpCommand("off")');
+    console.log('   simulateSensorData("temp", 25.5)');
     console.log("   wsInfo()");
     console.log("");
   }

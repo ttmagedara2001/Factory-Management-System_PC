@@ -31,14 +31,14 @@ const AutoLogin = ({ children }) => {
         
         console.log("✅ Auto login successful. Ready for connection.");
         
-        // Store JWT token in localStorage for WebSocket client
-        localStorage.setItem('jwtToken', authData.jwtToken);
+        // Store JWT token in localStorage
+        try { localStorage.setItem('jwtToken', authData.jwtToken); } catch (e) { console.warn('Failed to persist jwtToken', e); }
         
         // Store in AuthContext
         setAuth({ userId: authData.userId || email, jwtToken: authData.jwtToken });
         
         if (authData.refreshToken) {
-          localStorage.setItem('refreshToken', authData.refreshToken);
+          try { localStorage.setItem('refreshToken', authData.refreshToken); } catch (e) { console.warn('Failed to persist refreshToken', e); }
         }
         
       } catch (error) {
@@ -53,9 +53,8 @@ const AutoLogin = ({ children }) => {
         // Instead, show error state and require manual login
         console.warn("⚠️ WebSocket and API connections will not work until proper login");
         
-        // Clear any existing tokens
-        localStorage.removeItem('jwtToken');
-        localStorage.removeItem('refreshToken');
+        // Clear any existing tokens from localStorage
+        try { localStorage.removeItem('jwtToken'); localStorage.removeItem('refreshToken'); } catch (e) { console.warn('Failed to remove tokens', e); }
         
         setAuth({ userId: null, jwtToken: null });
       } finally {
