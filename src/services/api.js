@@ -1,8 +1,9 @@
 import axios from "axios";
 
-// Backend API URL - for development we proxy /api to the real backend via Vite
-// Use a relative path so the Vite dev proxy (configured in vite.config.js) can forward requests.
-const BASE_URL = "/api/v1/user";
+// Backend API URL from environment variables
+// In development, Vite proxy forwards /api to the real backend
+// In production, this can be configured via VITE_API_BASE_PATH
+const BASE_URL = import.meta.env.VITE_API_BASE_PATH || "/api/v1/user";
 
 // Named helper to allow other modules to read the base API URL
 export function getApiUrl() {

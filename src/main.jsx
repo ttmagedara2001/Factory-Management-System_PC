@@ -6,10 +6,10 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from './Context/AuthContext.jsx';
 import { login } from "./services/authService.js";
 
-// ✅ Auto-login credentials
-// Replace these with your actual Protonest credentials
-const email = "ratnaabinayansn@gmail.com";
-const password = "6M3@pwYvBGRVJLN"; // This is the secretKey from Protonest dashboard
+// ✅ Auto-login credentials from environment variables
+// Set these in .env file (see .env.example for template)
+const email = import.meta.env.VITE_AUTH_EMAIL || "";
+const password = import.meta.env.VITE_AUTH_SECRET_KEY || ""; // This is the secretKey from Protonest dashboard
 
 const AutoLogin = ({ children }) => {
   const { setAuth } = useAuth();
@@ -18,44 +18,44 @@ const AutoLogin = ({ children }) => {
 
   React.useEffect(() => {
     if (loginAttempted) return;
-    
+
     setLoginAttempted(true);
-    
+
     const performLogin = async () => {
       try {
         console.log("🔑 Attempting auto login...");
         console.log("📧 Email:", email);
         console.log("🔐 SecretKey length:", password.length);
-        
+
         const authData = await login(email, password);
-        
+
         console.log("✅ Auto login successful. Ready for connection.");
-        
+
         // Store JWT token in localStorage
         try { localStorage.setItem('jwtToken', authData.jwtToken); } catch (e) { console.warn('Failed to persist jwtToken', e); }
-        
+
         // Store in AuthContext
         setAuth({ userId: authData.userId || email, jwtToken: authData.jwtToken });
-        
+
         if (authData.refreshToken) {
           try { localStorage.setItem('refreshToken', authData.refreshToken); } catch (e) { console.warn('Failed to persist refreshToken', e); }
         }
-        
+
       } catch (error) {
         console.error("❌ Auto login failed. Cannot connect to services.");
         console.error("Auto login error details:", error.message);
-        
+
         if (error.message.includes("Invalid credentials")) {
           console.error("🔧 Credentials may be incorrect or expired. Please verify from Protonest dashboard");
         }
-        
+
         // DO NOT set mock token - this causes WebSocket connection failures
         // Instead, show error state and require manual login
         console.warn("⚠️ WebSocket and API connections will not work until proper login");
-        
+
         // Clear any existing tokens from localStorage
         try { localStorage.removeItem('jwtToken'); localStorage.removeItem('refreshToken'); } catch (e) { console.warn('Failed to remove tokens', e); }
-        
+
         setAuth({ userId: null, jwtToken: null });
       } finally {
         setIsLoading(false);

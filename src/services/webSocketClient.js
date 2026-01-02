@@ -1,5 +1,8 @@
 import { Client } from "@stomp/stompjs";
 
+// WebSocket URL from environment variables
+const WS_BASE_URL = import.meta.env.VITE_WS_URL || "wss://api.protonestconnect.co/ws";
+
 // Get JWT token from localStorage (set by login process)
 const getJwtToken = () => {
   const token = localStorage.getItem("jwtToken");
@@ -19,10 +22,8 @@ const buildWebSocketUrl = (jwtToken) => {
   // ✅ Encode the token for safe URL usage
   const encodedToken = encodeURIComponent(jwtToken);
 
-  // ✅ Pass the JWT as a query parameter
-  // const wsUrl = `ws://localhost:8091/ws?token=${encodedToken}`;
-  const wsUrl = `wss://api.protonestconnect.co/ws?token=${encodedToken}`;
-  // const wsUrl = `wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/ws?token=${encodedToken}`;
+  // ✅ Build URL from environment variable
+  const wsUrl = `${WS_BASE_URL}?token=${encodedToken}`;
 
   console.log(
     "🔌 WebSocket URL built:",
@@ -31,6 +32,7 @@ const buildWebSocketUrl = (jwtToken) => {
 
   return wsUrl;
 };
+
 
 // Create STOMP client (will be configured when connect() is called)
 let client = null;
