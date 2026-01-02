@@ -16,21 +16,31 @@ export const useAuth = () => {
 // 3. Created the Provider Component
 export const AuthProvider = ({ children }) => {
   // Initialize from localStorage
-  const [userId, setUserId] = useState(localStorage.getItem('userId') || '');
-  const [jwtToken, setJwtToken] = useState(localStorage.getItem('jwtToken') || '');
+  const [userId, setUserId] = useState(() => localStorage.getItem('userId') || '');
+  const [jwtToken, setJwtToken] = useState(() => localStorage.getItem('jwtToken') || '');
 
   const setAuth = ({ userId, jwtToken }) => {
     setUserId(userId);
     setJwtToken(jwtToken);
-    localStorage.setItem('jwtToken', jwtToken);
-    localStorage.setItem('userId', userId);
+    try {
+      if (jwtToken) localStorage.setItem('jwtToken', jwtToken);
+      if (userId) localStorage.setItem('userId', userId);
+    } catch (e) {
+      console.warn('AuthContext: failed to persist auth to localStorage', e);
+    }
     console.log('✅ Auth state updated:', { userId, hasToken: !!jwtToken });
   };
 
   const logout = () => {
     setUserId('');
     setJwtToken('');
-    localStorage.clear();
+    try {
+      localStorage.removeItem('jwtToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('userId');
+    } catch (e) {
+      console.warn('AuthContext: failed to clear localStorage', e);
+    }
     window.location.href = '/';
   };
 

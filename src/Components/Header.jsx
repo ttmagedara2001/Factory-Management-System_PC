@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, User, ChevronDown, Menu } from 'lucide-react';
-import { useAuth } from '../Context/AuthContext';
+import { useAuth } from '../Context/AuthContext.jsx';
 
 const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotifications, devices, selectedDevice, onDeviceChange, alertsCount = 0 }) => {
   const { auth } = useAuth();

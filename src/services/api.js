@@ -1,17 +1,48 @@
 import axios from "axios";
 
-// Environment-based API URL selection
-const getApiUrl = () => {
-  const isDev = import.meta.env.DEV;
-  const useLocal = import.meta.env.VITE_USE_LOCAL_API === "true";
+// Backend API URL - for development we proxy /api to the real backend via Vite
+// Use a relative path so the Vite dev proxy (configured in vite.config.js) can forward requests.
+const BASE_URL = "/api/v1/user";
 
-  if (isDev && useLocal) {
-    return "http://localhost:8091/api/v1/user";
-  }
-  return "https://api.protonestconnect.co/api/v1/user";
-};
+// Named helper to allow other modules to read the base API URL
+export function getApiUrl() {
+  return BASE_URL;
+}
 
-const BASE_URL = getApiUrl();
+/**
+ * Fetch stream data for a device from backend
+ * @param {Object} params - { deviceId, startTime, endTime, pagination, pageSize }
+ * @returns {Promise<Object>} - Response data from backend
+ */
+export async function getStreamDataForDevice({
+  deviceId,
+  startTime,
+  endTime,
+  pagination,
+  pageSize,
+}) {
+  const jwtToken = localStorage.getItem("jwtToken");
+  if (!jwtToken) throw new Error("No JWT token available");
+  const payload = {
+    deviceId,
+    startTime,
+    endTime,
+    pagination: String(pagination),
+    pageSize: String(pageSize),
+  };
+  const response = await axios.post(
+    `${BASE_URL}/get-stream-data/device`,
+    payload,
+    {
+      headers: {
+        "X-Token": jwtToken,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+    }
+  );
+  return response.data;
+}
 
 console.log("🔧 API Base URL:", BASE_URL);
 

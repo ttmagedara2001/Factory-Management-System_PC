@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Save, AlertTriangle, Play, Square } from 'lucide-react';
-import FactoryStatus from './FactoryStatus';
+import FactoryStatus from './FactoryStatus.jsx';
 
 const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketClient, selectedDevice }) => {
   const [localThresholds, setLocalThresholds] = useState(thresholds);
@@ -34,7 +34,9 @@ const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketCli
       const command = newStatus === 'running' ? 'RUN' : 'STOP';
       
       // Send command via WebSocket to the selected device
-      const success = webSocketClient.sendMachineCommand(selectedDevice, command);
+      const success = webSocketClient?.sendMachineControlCommand
+        ? webSocketClient.sendMachineControlCommand(command)
+        : false;
       
       if (success) {
         setMachineStatus(newStatus);

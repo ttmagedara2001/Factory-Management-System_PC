@@ -19,8 +19,8 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
     temperature: sensorData?.temperature ?? null,
     humidity: sensorData?.humidity ?? null,
     co2: sensorData?.co2 ?? null,
-    airQuality: sensorData?.airQuality ?? null
-    // units removed: now handled in Dashboard
+    airQuality: sensorData?.airQuality ?? null,
+    units: sensorData?.units ?? null // Production units
   };
 
   // Check if value is critical or warning
@@ -92,7 +92,15 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
               <AlertTriangle size={22} className={`absolute top-2 right-2 ${getAlertLevel('noise', currentValues.noise) === 'critical' ? 'text-red-500' : 'text-yellow-500'}`} title={getAlertLevel('noise', currentValues.noise) + ' alert'} />
             )}
           </div>
-          {/* Units Gauge removed: now handled in Dashboard */}
+          {/* Units Gauge (no alert) */}
+          <Gauge
+            value={currentValues.units ?? '--'}
+            unit="units"
+            label="Production Units"
+            color="#22C55E"
+            percentage={currentValues.units ? (currentValues.units / 1000) * 100 : 0}
+            maxValue={1000}
+          />
         </div>
       </div>
 

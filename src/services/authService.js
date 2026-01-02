@@ -1,16 +1,7 @@
 import axios from "axios";
 
-// Environment-based API URL selection
-const getApiUrl = () => {
-  const isDev = import.meta.env.DEV;
-  const useLocal = import.meta.env.VITE_USE_LOCAL_API === "true";
-
-  if (isDev && useLocal) {
-    return "http://localhost:8091/api/v1/user";
-  }
-  return "https://api.protonestconnect.co/api/v1/user";
-};
-
+// Import shared API URL utility
+import { getApiUrl } from "./api.js";
 const API_URL = getApiUrl();
 
 // Authentication and get JWT + refresh token
