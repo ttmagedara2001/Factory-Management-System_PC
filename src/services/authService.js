@@ -144,53 +144,14 @@ export const login = async (email, password) => {
   }
 };
 
-// Token refresh function using /get-new-token endpoint
-export const refreshToken = async (refreshToken) => {
-  try {
-    if (!refreshToken) {
-      throw new Error("Refresh token is required");
-    }
-
-    console.log("🔄 Attempting token refresh with /get-new-token endpoint");
-
-    const response = await axios.post(
-      `${API_URL}/get-new-token`,
-      {}, // Empty body
-      {
-        headers: {
-          "X-Refresh-Token": refreshToken,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        timeout: 10000,
-      }
-    );
-
-    console.log("📡 Token refresh response:", response.data);
-
-    if (response.data.status === "Success") {
-      const newJwtToken =
-        response.data.data?.jwtToken || response.data.jwtToken;
-      const newRefreshToken =
-        response.data.data?.refreshToken || response.data.refreshToken;
-
-      if (newJwtToken) {
-        console.log("✅ Token refresh successful");
-        return { jwtToken: newJwtToken, refreshToken: newRefreshToken };
-      } else {
-        throw new Error("No JWT token in refresh response");
-      }
-    } else {
-      throw new Error(
-        `Token refresh failed: ${response.data.message || "Unknown error"}`
-      );
-    }
-  } catch (error) {
-    console.error("❌ Token refresh failed:", {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
-    });
-    throw error;
-  }
-};
+// ============================================
+// NOTE: Token refresh is handled automatically by the axios
+// interceptor in api.js (lines 168-206). When a 400/401 error
+// occurs with an "Invalid token" message, the interceptor will
+// automatically call /get-new-token and retry the request.
+// 
+// This centralized approach ensures:
+// 1. No duplicate token refresh logic
+// 2. Transparent retry of failed requests
+// 3. Automatic logout if refresh fails
+// ============================================

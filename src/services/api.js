@@ -9,40 +9,13 @@ export function getApiUrl() {
   return BASE_URL;
 }
 
-/**
- * Fetch stream data for a device from backend
- * @param {Object} params - { deviceId, startTime, endTime, pagination, pageSize }
- * @returns {Promise<Object>} - Response data from backend
- */
-export async function getStreamDataForDevice({
-  deviceId,
-  startTime,
-  endTime,
-  pagination,
-  pageSize,
-}) {
-  const jwtToken = localStorage.getItem("jwtToken");
-  if (!jwtToken) throw new Error("No JWT token available");
-  const payload = {
-    deviceId,
-    startTime,
-    endTime,
-    pagination: String(pagination),
-    pageSize: String(pageSize),
-  };
-  const response = await axios.post(
-    `${BASE_URL}/get-stream-data/device`,
-    payload,
-    {
-      headers: {
-        "X-Token": jwtToken,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-    }
-  );
-  return response.data;
-}
+// ============================================
+// NOTE: API business logic functions (getStreamDataForDevice,
+// getStateDetailsForDevice, updateStateDetails, etc.) are
+// centralized in deviceService.js. This file only provides:
+// 1. The axios instance with interceptors
+// 2. The base URL helper function
+// ============================================
 
 console.log("🔧 API Base URL:", BASE_URL);
 
