@@ -3,6 +3,9 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      screens: {
+        'xs': '475px', // Extra small screens (portrait phones)
+      },
       colors: {
         primary: {
           50: "#fffbeb",

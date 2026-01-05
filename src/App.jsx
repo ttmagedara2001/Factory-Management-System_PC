@@ -316,35 +316,35 @@ export default function App() {
         />
 
         {/* Connection Status Bar */}
-        <div className="w-full flex justify-end items-center px-8 py-2 bg-transparent">
-          <div className="flex gap-4 text-xs font-semibold">
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${isWebSocketConnected
-                ? 'bg-green-100 text-green-700'
-                : isConnecting
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-red-100 text-red-600'
+        <div className="w-full flex flex-wrap justify-center sm:justify-end items-center px-3 sm:px-8 py-2 bg-transparent gap-2">
+          <div className="flex flex-wrap justify-center gap-2 sm:gap-4 text-[10px] sm:text-xs font-semibold">
+            <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full ${isWebSocketConnected
+              ? 'bg-green-100 text-green-700'
+              : isConnecting
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-red-100 text-red-600'
               }`}>
-              <span className={`w-2 h-2 rounded-full ${isWebSocketConnected
-                  ? 'bg-green-500'
-                  : isConnecting
-                    ? 'bg-amber-500 animate-pulse'
-                    : 'bg-red-500'
+              <span className={`w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full ${isWebSocketConnected
+                ? 'bg-green-500'
+                : isConnecting
+                  ? 'bg-amber-500 animate-pulse'
+                  : 'bg-red-500'
                 }`}></span>
-              WebSocket: {isWebSocketConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
+              <span className="hidden xs:inline">WebSocket:</span> {isWebSocketConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'WS Off'}
             </span>
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${isWebSocketConnected
-                ? 'bg-green-100 text-green-700'
-                : isConnecting
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-red-100 text-red-600'
+            <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full ${isWebSocketConnected
+              ? 'bg-green-100 text-green-700'
+              : isConnecting
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-red-100 text-red-600'
               }`}>
-              <span className={`w-2 h-2 rounded-full ${isWebSocketConnected
-                  ? 'bg-green-500'
-                  : isConnecting
-                    ? 'bg-amber-500 animate-pulse'
-                    : 'bg-red-500'
+              <span className={`w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full ${isWebSocketConnected
+                ? 'bg-green-500'
+                : isConnecting
+                  ? 'bg-amber-500 animate-pulse'
+                  : 'bg-red-500'
                 }`}></span>
-              MQTT: {isWebSocketConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
+              <span className="hidden xs:inline">MQTT:</span> {isWebSocketConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'MQTT Off'}
             </span>
           </div>
         </div>
@@ -356,7 +356,7 @@ export default function App() {
 
           {/* Notification Sidebar */}
           {showNotifications && (
-            <div className="absolute top-0 right-0 h-full w-80 bg-white shadow-2xl border-l border-slate-200 z-50 overflow-y-auto">
+            <div className="absolute top-0 right-0 h-full w-full sm:w-80 bg-white shadow-2xl border-l border-slate-200 z-50 overflow-y-auto">
               <div className="p-4 border-b border-slate-200 bg-slate-50 sticky top-0">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-bold text-slate-800 uppercase">Critical Alerts</h3>

@@ -43,15 +43,15 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
   };
 
   return (
-    <div className="space-y-6 mt-8">
+    <div className="space-y-4 sm:space-y-6 mt-4 sm:mt-8">
       {/* Machine Performance */}
       <div>
-        <div className="flex items-center gap-2 mb-4">
-          <h3 className="font-bold text-slate-800 uppercase">Machine Performance</h3>
-          <span className="text-slate-400">|</span>
-          <span className="font-bold text-slate-600 uppercase">Real Time</span>
+        <div className="flex flex-wrap items-center gap-1 sm:gap-2 mb-3 sm:mb-4">
+          <h3 className="text-sm sm:text-base font-bold text-slate-800 uppercase">Machine Performance</h3>
+          <span className="text-slate-400 hidden sm:inline">|</span>
+          <span className="text-xs sm:text-base font-bold text-slate-600 uppercase">Real Time</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-6">
           {/* Vibration Gauge with alert */}
           <div className="relative">
             <Gauge
@@ -97,13 +97,13 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
 
       {/* Environment Analysis */}
       <div>
-        <div className="flex items-center gap-2 mb-4">
-          <h3 className="font-bold text-slate-800 uppercase">Environment Analysis</h3>
-          <span className="text-slate-400">|</span>
-          <span className="font-bold text-slate-600 uppercase">Real Time</span>
+        <div className="flex flex-wrap items-center gap-1 sm:gap-2 mb-3 sm:mb-4">
+          <h3 className="text-sm sm:text-base font-bold text-slate-800 uppercase">Environment Analysis</h3>
+          <span className="text-slate-400 hidden sm:inline">|</span>
+          <span className="text-xs sm:text-base font-bold text-slate-600 uppercase">Real Time</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-6 mb-3 sm:mb-4">
           {/* Temperature Card with alert */}
           <EnvironmentCard
             value={currentValues.temperature !== null ? `${currentValues.temperature}°C` : '--'}
@@ -131,31 +131,31 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
         </div>
 
         {/* Air Quality Row */}
-        <div className="bg-white p-3 px-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between mt-4">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-slate-500 uppercase">Air Quality Index:</span>
+        <div className="bg-white p-3 sm:px-6 rounded-xl shadow-sm border border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mt-3 sm:mt-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase">Air Quality Index:</span>
             <span className={`font-bold flex items-center gap-1 ${currentValues.airQuality === null ? 'text-slate-400' :
-                currentValues.airQuality < 50 ? 'text-red-600' :
-                  currentValues.airQuality < 75 ? 'text-yellow-600' :
-                    'text-green-600'
+              currentValues.airQuality < 50 ? 'text-red-600' :
+                currentValues.airQuality < 75 ? 'text-yellow-600' :
+                  'text-green-600'
               }`}>
               {currentValues.airQuality !== null ? currentValues.airQuality : '--'}
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] font-bold text-slate-600 uppercase">Ventilation Control:</span>
-              <span className="text-[8px] bg-green-200 text-green-800 px-1 rounded uppercase font-bold">Manual</span>
+          <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
+            <div className="flex flex-col items-start sm:items-end">
+              <span className="text-[9px] sm:text-[10px] font-bold text-slate-600 uppercase">Ventilation Control:</span>
+              <span className="text-[7px] sm:text-[8px] bg-green-200 text-green-800 px-1 rounded uppercase font-bold">Manual</span>
             </div>
 
             <div
-              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors duration-300 ${ventilation ? 'bg-green-500' : 'bg-slate-300'}`}
+              className={`w-10 sm:w-12 h-5 sm:h-6 rounded-full p-0.5 sm:p-1 cursor-pointer transition-colors duration-300 ${ventilation ? 'bg-green-500' : 'bg-slate-300'}`}
               onClick={handleVentilationToggle}
             >
-              <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${ventilation ? 'translate-x-6' : 'translate-x-0'}`}></div>
+              <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${ventilation ? 'translate-x-5 sm:translate-x-6' : 'translate-x-0'}`}></div>
             </div>
-            <span className="text-xs font-bold text-slate-700">{ventilation ? 'ON' : 'OFF'}</span>
+            <span className="text-[10px] sm:text-xs font-bold text-slate-700">{ventilation ? 'ON' : 'OFF'}</span>
           </div>
         </div>
       </div>
