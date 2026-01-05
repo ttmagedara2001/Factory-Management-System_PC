@@ -5,7 +5,7 @@ import Gauge from './Gauge';
 
 const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevice }) => {
   const [ventilation, setVentilation] = useState(true);
-  
+
   const handleVentilationToggle = () => {
     // Local state control only - no WebSocket commands
     setVentilation(!ventilation);
@@ -51,7 +51,7 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
           <span className="text-slate-400">|</span>
           <span className="font-bold text-slate-600 uppercase">Real Time</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Vibration Gauge with alert */}
           <div className="relative">
             <Gauge
@@ -92,15 +92,6 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
               <AlertTriangle size={22} className={`absolute top-2 right-2 ${getAlertLevel('noise', currentValues.noise) === 'critical' ? 'text-red-500' : 'text-yellow-500'}`} title={getAlertLevel('noise', currentValues.noise) + ' alert'} />
             )}
           </div>
-          {/* Units Gauge (no alert) */}
-          <Gauge
-            value={currentValues.units ?? '--'}
-            unit="units"
-            label="Production Units"
-            color="#22C55E"
-            percentage={currentValues.units ? (currentValues.units / 1000) * 100 : 0}
-            maxValue={1000}
-          />
         </div>
       </div>
 
@@ -111,7 +102,7 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
           <span className="text-slate-400">|</span>
           <span className="font-bold text-slate-600 uppercase">Real Time</span>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
           {/* Temperature Card with alert */}
           <EnvironmentCard
@@ -143,12 +134,11 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
         <div className="bg-white p-3 px-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between mt-4">
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-slate-500 uppercase">Air Quality Index:</span>
-            <span className={`font-bold flex items-center gap-1 ${
-              currentValues.airQuality === null ? 'text-slate-400' :
-              currentValues.airQuality < 50 ? 'text-red-600' :
-              currentValues.airQuality < 75 ? 'text-yellow-600' :
-              'text-green-600'
-            }`}>
+            <span className={`font-bold flex items-center gap-1 ${currentValues.airQuality === null ? 'text-slate-400' :
+                currentValues.airQuality < 50 ? 'text-red-600' :
+                  currentValues.airQuality < 75 ? 'text-yellow-600' :
+                    'text-green-600'
+              }`}>
               {currentValues.airQuality !== null ? currentValues.airQuality : '--'}
             </span>
           </div>
@@ -158,8 +148,8 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
               <span className="text-[10px] font-bold text-slate-600 uppercase">Ventilation Control:</span>
               <span className="text-[8px] bg-green-200 text-green-800 px-1 rounded uppercase font-bold">Manual</span>
             </div>
-            
-            <div 
+
+            <div
               className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors duration-300 ${ventilation ? 'bg-green-500' : 'bg-slate-300'}`}
               onClick={handleVentilationToggle}
             >

@@ -75,8 +75,13 @@ class WebSocketClient {
       heartbeatOutgoing: 4000,
 
       onConnect: (frame) => {
-        console.log("✅ WebSocket Connected:", frame);
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("✅ STOMP WebSocket Connected Successfully!");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📋 Connection Frame:", frame);
         this.isReady = true;
+
+        const subscribedTopics = [];
 
         // Subscribe to MQTTX-style topics for the current device
         if (this.currentDeviceId) {
@@ -99,7 +104,7 @@ class WebSocketClient {
               });
             }
           });
-          console.log(`🔔 Subscribed to ${streamTopic}`);
+          subscribedTopics.push(streamTopic);
 
           // /topic/state/{deviceId}
           const stateTopic = `/topic/state/${this.currentDeviceId}`;
@@ -119,13 +124,37 @@ class WebSocketClient {
               });
             }
           });
-          console.log(`🔔 Subscribed to ${stateTopic}`);
+          subscribedTopics.push(stateTopic);
         }
 
         // If we have a device already set, subscribe to per-sensor topics as before
         if (this.currentDeviceId) {
           this._subscribeToDeviceTopics(this.currentDeviceId);
         }
+
+        // Log all subscribed topics
+        console.log("");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("🔔 SUBSCRIBED TOPICS:");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        if (this.currentDeviceId) {
+          console.log(`   📍 Device: ${this.currentDeviceId}`);
+          console.log("   📡 Stream Topics:");
+          console.log(`      • protonest/${this.currentDeviceId}/stream/fmc/vibration`);
+          console.log(`      • protonest/${this.currentDeviceId}/stream/fmc/pressure`);
+          console.log(`      • protonest/${this.currentDeviceId}/stream/fmc/temperature`);
+          console.log(`      • protonest/${this.currentDeviceId}/stream/fmc/noise`);
+          console.log(`      • protonest/${this.currentDeviceId}/stream/fmc/humidity`);
+          console.log(`      • protonest/${this.currentDeviceId}/stream/fmc/co2`);
+          console.log(`      • protonest/${this.currentDeviceId}/stream/fmc/units`);
+          console.log("   🔧 State Topics:");
+          console.log(`      • protonest/${this.currentDeviceId}/state/fmc/ventilation`);
+          console.log(`      • protonest/${this.currentDeviceId}/state/fmc/machineControl`);
+        } else {
+          console.log("   ⚠️ No device selected yet. Topics will be subscribed when device is selected.");
+        }
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("");
 
         // Call user's connect callback
         if (this.connectCallback) {

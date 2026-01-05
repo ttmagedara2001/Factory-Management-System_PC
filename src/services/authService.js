@@ -47,12 +47,7 @@ export const login = async (email, password) => {
         timeout: 10000,
       });
 
-      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      console.log("📡 HTTP Response from /get-token API");
-      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      console.log("✅ Status Code:", response.status, response.statusText);
-      console.log("📋 Response Data:", JSON.stringify(response.data, null, 2));
-      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("✅ Authentication request successful");
 
       // Check for successful response according to API docs
       if (response.data.status === "Success") {
@@ -144,14 +139,4 @@ export const login = async (email, password) => {
   }
 };
 
-// ============================================
-// NOTE: Token refresh is handled automatically by the axios
-// interceptor in api.js (lines 168-206). When a 400/401 error
-// occurs with an "Invalid token" message, the interceptor will
-// automatically call /get-new-token and retry the request.
-// 
-// This centralized approach ensures:
-// 1. No duplicate token refresh logic
-// 2. Transparent retry of failed requests
-// 3. Automatic logout if refresh fails
-// ============================================
+
