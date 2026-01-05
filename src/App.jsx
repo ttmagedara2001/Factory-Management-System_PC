@@ -257,6 +257,21 @@ export default function App() {
   // Handle device selection change
   const handleDeviceChange = (deviceId) => {
     console.log(`🔄 [App] Device changed to: ${deviceId}`);
+    
+    // Reset sensor data when switching devices to avoid showing stale data
+    setSensorData({
+      vibration: null,
+      pressure: null,
+      noise: null,
+      temperature: null,
+      humidity: null,
+      co2: null,
+      airQuality: null,
+      units: null,
+      ventilation: null,
+      machineControl: null
+    });
+    
     setSelectedDevice(deviceId);
     localStorage.setItem('selectedDevice', deviceId);
   };
@@ -313,6 +328,7 @@ export default function App() {
           onDeviceChange={handleDeviceChange}
           alertsCount={alerts.length}
           alerts={alerts}
+          isWebSocketConnected={isWebSocketConnected}
         />
 
         {/* Connection Status Bar */}

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Save, AlertTriangle, Play, Square } from 'lucide-react';
 import FactoryStatus from './FactoryStatus.jsx';
+import { updateStateDetails } from '../services/deviceService.js';
 
 const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketClient, selectedDevice }) => {
   const [localThresholds, setLocalThresholds] = useState(thresholds);
   const [saved, setSaved] = useState(false);
   const [controlMode, setControlMode] = useState('auto'); // 'auto' or 'manual'
   const [machineStatus, setMachineStatus] = useState('running'); // 'running' or 'stopped'
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
 
   const handleChange = (category, field, value) => {
     setLocalThresholds(prev => ({
@@ -28,22 +30,41 @@ const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketCli
     setControlMode(mode);
   };
 
-  const handleMachineToggle = () => {
-    if (controlMode === 'manual' && webSocketClient && selectedDevice) {
+  const handleMachineToggle = async () => {
+    if (controlMode === 'manual' && selectedDevice) {
       const newStatus = machineStatus === 'running' ? 'stopped' : 'running';
       const command = newStatus === 'running' ? 'RUN' : 'STOP';
       
-      // Send command via WebSocket to the selected device
-      const success = webSocketClient?.sendMachineControlCommand
-        ? webSocketClient.sendMachineControlCommand(command)
-        : false;
+      setIsSendingCommand(true);
       
-      if (success) {
-        setMachineStatus(newStatus);
-        console.log(`✅ [Settings] Machine command sent to ${selectedDevice}: ${command}`);
-      } else {
-        console.error('❌ [Settings] Failed to send machine command');
-        alert('Failed to send machine control command. Please check WebSocket connection.');
+      try {
+        // Try WebSocket first
+        let success = false;
+        if (webSocketClient?.sendMachineControlCommand) {
+          success = webSocketClient.sendMachineControlCommand(command);
+        }
+        
+        // If WebSocket fails, fallback to HTTP API
+        if (!success) {
+          console.log(`[Settings] WebSocket failed, trying HTTP API fallback...`);
+          await updateStateDetails(selectedDevice, 'machineControl', { 
+            machineControl: command.toLowerCase(),
+            timestamp: new Date().toISOString()
+          });
+          success = true;
+          console.log(`✅ [Settings] Machine command sent via HTTP API to ${selectedDevice}: ${command}`);
+        } else {
+          console.log(`✅ [Settings] Machine command sent via WebSocket to ${selectedDevice}: ${command}`);
+        }
+        
+        if (success) {
+          setMachineStatus(newStatus);
+        }
+      } catch (error) {
+        console.error('❌ [Settings] Failed to send machine command:', error);
+        alert('Failed to send machine control command. Please check your connection.');
+      } finally {
+        setIsSendingCommand(false);
       }
     }
   };

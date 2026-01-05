@@ -2,13 +2,52 @@ import React, { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import EnvironmentCard from './EnvironmentCard';
 import Gauge from './Gauge';
+import { updateStateDetails } from '../services/deviceService.js';
 
 const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevice }) => {
   const [ventilation, setVentilation] = useState(true);
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
 
-  const handleVentilationToggle = () => {
-    // Local state control only - no WebSocket commands
-    setVentilation(!ventilation);
+  const handleVentilationToggle = async () => {
+    if (!selectedDevice) {
+      console.warn('[RealTimeWindow] No device selected for ventilation control');
+      return;
+    }
+
+    const newVentilation = !ventilation;
+    const command = newVentilation ? 'on' : 'off';
+    
+    setIsSendingCommand(true);
+    
+    try {
+      // Try WebSocket first
+      let success = false;
+      if (webSocketClient?.sendVentilationCommand) {
+        success = webSocketClient.sendVentilationCommand(command, 'manual');
+      }
+      
+      // If WebSocket fails, fallback to HTTP API
+      if (!success) {
+        console.log(`[RealTimeWindow] WebSocket failed, trying HTTP API fallback...`);
+        await updateStateDetails(selectedDevice, 'ventilation', { 
+          ventilation: command,
+          mode: 'manual',
+          timestamp: new Date().toISOString()
+        });
+        success = true;
+        console.log(`✅ [RealTimeWindow] Ventilation command sent via HTTP API: ${command}`);
+      } else {
+        console.log(`✅ [RealTimeWindow] Ventilation command sent via WebSocket: ${command}`);
+      }
+      
+      if (success) {
+        setVentilation(newVentilation);
+      }
+    } catch (error) {
+      console.error('❌ [RealTimeWindow] Failed to send ventilation command:', error);
+    } finally {
+      setIsSendingCommand(false);
+    }
   };
 
   // Current values - to be populated from real-time WebSocket data
@@ -150,12 +189,16 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
             </div>
 
             <div
-              className={`w-10 sm:w-12 h-5 sm:h-6 rounded-full p-0.5 sm:p-1 cursor-pointer transition-colors duration-300 ${ventilation ? 'bg-green-500' : 'bg-slate-300'}`}
-              onClick={handleVentilationToggle}
+              className={`w-10 sm:w-12 h-5 sm:h-6 rounded-full p-0.5 sm:p-1 transition-colors duration-300 ${
+                isSendingCommand ? 'opacity-50 cursor-wait' : 'cursor-pointer'
+              } ${ventilation ? 'bg-green-500' : 'bg-slate-300'}`}
+              onClick={!isSendingCommand ? handleVentilationToggle : undefined}
             >
               <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${ventilation ? 'translate-x-5 sm:translate-x-6' : 'translate-x-0'}`}></div>
             </div>
-            <span className="text-[10px] sm:text-xs font-bold text-slate-700">{ventilation ? 'ON' : 'OFF'}</span>
+            <span className="text-[10px] sm:text-xs font-bold text-slate-700">
+              {isSendingCommand ? '...' : (ventilation ? 'ON' : 'OFF')}
+            </span>
           </div>
         </div>
       </div>

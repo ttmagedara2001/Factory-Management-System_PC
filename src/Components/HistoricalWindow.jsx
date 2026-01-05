@@ -1,7 +1,16 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { History, Calendar, Download, Filter, Search, TrendingUp, AlertTriangle, Eye, EyeOff, X } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { History, Calendar, Download, Filter, Search, TrendingUp, AlertTriangle, Eye, EyeOff, X, Loader2, RefreshCw } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, CartesianGrid } from 'recharts';
 import FactoryStatus from './FactoryStatus';
+import {
+  fetchAllHistoricalData,
+  getOEEChartData,
+  getDowntimeParetoData,
+  getMTBFHours,
+  analyzeAlertForDowntime,
+  formatAlertsAsEventLog,
+  getTimeRange,
+} from '../services/historicalDataService';
 
 
 
@@ -41,89 +50,87 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
     noise: true
   });
 
-  // Data arrays - fetched from localStorage every 30s
+  // Loading and error states
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingStates, setLoadingStates] = useState({
+    production: false,
+    oee: false,
+    machine: false,
+    environmental: false,
+    downtime: false,
+  });
+  const [dataError, setDataError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [mtbfHours, setMtbfHours] = useState(0);
+
+  // Data arrays - fetched from HTTP API
   const [machinePerformanceData, setMachinePerformanceData] = useState([]);
   const [environmentalData, setEnvironmentalData] = useState([]);
   const [productionData, setProductionData] = useState([]);
-  const [oeeData, setOeeData] = useState([]);
+  const [oeeData, setOeeData] = useState([{ week: new Date().toISOString().split('T')[0], oee: 0 }]);
   const [downtimeData, setDowntimeData] = useState([]);
-  const eventLogData = alerts.map(alert => ({
-    timestamp: alert.time,
-    severity: alert.severity || 'info',
-    device: alert.deviceId || '',
-    event: alert.msg,
-    code: alert.sensorType || '',
-  }));
+  const eventLogData = formatAlertsAsEventLog(alerts);
 
-  // Derive historical data from in-memory sensorHistory every 30s
+
+  // Fetch historical data from HTTP API
+  const loadHistoricalData = useCallback(async () => {
+    if (!selectedDevice) {
+      console.log('⚠️ [Historical] No device selected');
+      return;
+    }
+
+    setIsLoading(true);
+    setDataError(null);
+
+    try {
+      console.log(`📊 [Historical] Loading data for ${selectedDevice}, range: ${dateRange}`);
+
+      // Fetch all data using the historical data service
+      const result = await fetchAllHistoricalData(selectedDevice, dateRange);
+
+      // Update state with HTTP data
+      setProductionData(result.productionData || []);
+      setMachinePerformanceData(result.machinePerformanceData || []);
+      setEnvironmentalData(result.environmentalData || []);
+
+      // OEE and Downtime from localStorage (calculated locally)
+      setOeeData(result.oeeData || [{ week: new Date().toISOString().split('T')[0], oee: 0 }]);
+      setDowntimeData(result.downtimeData || []);
+      setMtbfHours(result.mtbf || 0);
+
+      setLastUpdated(new Date());
+      console.log(`✅ [Historical] Data loaded successfully`);
+    } catch (error) {
+      console.error(`❌ [Historical] Error loading data:`, error);
+      setDataError(error.message || 'Failed to load historical data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedDevice, dateRange]);
+
+  // Initial load and periodic refresh
   useEffect(() => {
-    let intervalId;
-    const fetchHistoricalData = () => {
-      const raw = sensorHistory[selectedDevice] || {};
-      const grouped = {
-        vibration: raw.vibration || [],
-        pressure: raw.pressure || [],
-        noise: raw.noise || [],
-        temperature: raw.temperature || [],
-        humidity: raw.humidity || [],
-        co2: raw.co2 || [],
-        aqi: raw.aqi || [],
-        units: raw.units || [],
-      };
+    loadHistoricalData();
 
-      const machineData = [];
-      const envData = [];
-      const prodData = [];
-      const oeeDataArr = [];
-
-      // Assume arrays are newest-first
-      const length = Math.max(
-        grouped.vibration.length,
-        grouped.pressure.length,
-        grouped.noise.length,
-        grouped.temperature.length,
-        grouped.humidity.length,
-        grouped.co2.length,
-        grouped.aqi.length,
-        grouped.units.length
-      );
-
-      for (let i = 0; i < length; i++) {
-        const time = grouped.vibration[i]?.timestamp || grouped.pressure[i]?.timestamp || grouped.noise[i]?.timestamp || grouped.temperature[i]?.timestamp || '';
-        machineData.push({
-          time,
-          vibration: grouped.vibration[i]?.value,
-          pressure: grouped.pressure[i]?.value,
-          noise: grouped.noise[i]?.value,
-        });
-        envData.push({
-          time,
-          temperature: grouped.temperature[i]?.value,
-          humidity: grouped.humidity[i]?.value,
-          co2: grouped.co2[i]?.value,
-          aqi: grouped.aqi[i]?.value,
-        });
-        prodData.push({
-          date: time ? time.slice(0, 10) : '',
-          produced: grouped.units[i]?.value,
-          target: 1024,
-        });
-        oeeDataArr.push({
-          week: time ? time.slice(0, 10) : '',
-          oee: 90 + Math.random() * 5
-        });
-      }
-
-      setMachinePerformanceData(machineData);
-      setEnvironmentalData(envData);
-      setProductionData(prodData);
-      setOeeData(oeeDataArr);
-    };
-
-    fetchHistoricalData();
-    intervalId = setInterval(fetchHistoricalData, 30000);
+    // Refresh data every 30 seconds
+    const intervalId = setInterval(loadHistoricalData, 30000);
     return () => clearInterval(intervalId);
-  }, [selectedDevice, sensorHistory]);
+  }, [loadHistoricalData]);
+
+  // Analyze alerts for downtime tracking
+  useEffect(() => {
+    if (alerts && alerts.length > 0 && selectedDevice) {
+      // Process new alerts for downtime analysis
+      const lastAlert = alerts[0]; // Most recent alert
+      if (lastAlert) {
+        analyzeAlertForDowntime(lastAlert, selectedDevice);
+        // Refresh downtime data
+        setDowntimeData(getDowntimeParetoData());
+        setMtbfHours(getMTBFHours());
+      }
+    }
+  }, [alerts, selectedDevice]);
+
 
   const toggleEnvMetric = (metric) => {
     setEnvVisibility(prev => ({
@@ -325,19 +332,68 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
             </div>
           </div>
 
-          {/* Export Button */}
-          <button
-            onClick={() => setShowExportDialog(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors shadow-sm"
-          >
-            <Download size={16} />
-            Export Data
-          </button>
+          {/* Refresh & Export Buttons */}
+          <div className="flex items-center gap-3">
+            {/* Loading/Refresh Indicator */}
+            <button
+              onClick={loadHistoricalData}
+              disabled={isLoading}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors disabled:opacity-50"
+            >
+              {isLoading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RefreshCw size={16} />
+              )}
+              {isLoading ? 'Loading...' : 'Refresh'}
+            </button>
+
+            {/* Last Updated Indicator */}
+            {lastUpdated && !isLoading && (
+              <span className="text-xs text-slate-400">
+                Updated: {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+
+            {/* Export Button */}
+            <button
+              onClick={() => setShowExportDialog(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors shadow-sm"
+            >
+              <Download size={16} />
+              Export Data
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* Error Message */}
+      {dataError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+          <AlertTriangle className="text-red-500" size={20} />
+          <div>
+            <p className="text-sm font-semibold text-red-800">Error Loading Data</p>
+            <p className="text-xs text-red-600">{dataError}</p>
+          </div>
+          <button
+            onClick={loadHistoricalData}
+            className="ml-auto px-3 py-1 bg-red-100 text-red-700 rounded text-xs font-semibold hover:bg-red-200"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Production Volume & OEE Trends */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-xl">
+            <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200">
+              <Loader2 className="animate-spin text-blue-500" size={20} />
+              <span className="text-sm font-medium text-slate-600">Loading data...</span>
+            </div>
+          </div>
+        )}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
           <h3 className="text-sm font-bold text-slate-800 uppercase mb-4">Production Volume Trends</h3>
           <ResponsiveContainer width="100%" height={250}>
@@ -359,14 +415,14 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
             <LineChart data={oeeData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} domain={[75, 95]} />
+              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} domain={[0, 100]} />
               <Tooltip />
               <Line type="monotone" dataKey="oee" stroke="#10B981" strokeWidth={3} dot={{ r: 4 }} name="OEE %" />
             </LineChart>
           </ResponsiveContainer>
           <div className="mt-4 flex items-center gap-2 text-xs">
             <TrendingUp size={16} className="text-green-500" />
-            <span className="font-semibold text-slate-600">MTBF (Mean Time Between Failures): <span className="text-green-600">127.5 hours</span></span>
+            <span className="font-semibold text-slate-600">MTBF (Mean Time Between Failures): <span className="text-green-600">{mtbfHours > 0 ? `${mtbfHours} hours` : '0 hours (collecting data...)'}</span></span>
           </div>
         </div>
       </div>

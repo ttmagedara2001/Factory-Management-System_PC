@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, User, ChevronDown, Menu } from 'lucide-react';
+import { Bell, User, ChevronDown, Menu, Wifi, WifiOff } from 'lucide-react';
 import { useAuth } from '../Context/AuthContext.jsx';
 
-const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotifications, devices, selectedDevice, onDeviceChange, alertsCount = 0 }) => {
+const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotifications, devices, selectedDevice, onDeviceChange, alertsCount = 0, isWebSocketConnected = false }) => {
   const { auth } = useAuth();
 
   // Extract username from email (before @) or use full userId
@@ -87,6 +87,20 @@ const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotif
               ))}
             </div>
           )}
+        </div>
+
+        <div className="h-6 sm:h-8 w-px bg-slate-400 mx-1 sm:mx-2 hidden sm:block"></div>
+
+        {/* WebSocket Connection Status */}
+        <div className="flex items-center gap-1.5" title={isWebSocketConnected ? 'Real-time connected' : 'Disconnected'}>
+          {isWebSocketConnected ? (
+            <Wifi size={18} className="text-green-500" />
+          ) : (
+            <WifiOff size={18} className="text-red-400" />
+          )}
+          <span className={`text-xs font-medium hidden md:inline ${isWebSocketConnected ? 'text-green-600' : 'text-red-400'}`}>
+            {isWebSocketConnected ? 'Live' : 'Offline'}
+          </span>
         </div>
 
         <div className="h-6 sm:h-8 w-px bg-slate-400 mx-1 sm:mx-2 hidden sm:block"></div>
