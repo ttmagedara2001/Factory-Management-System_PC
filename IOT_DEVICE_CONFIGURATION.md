@@ -70,14 +70,28 @@ This document provides complete configuration details for IoT devices (or device
 All topics follow the ProtoNest standard format:
 
 ```
-protonest/<devicename>/<category>/<topic>
+protonest/<devicename>/<category>/fmc/<topic>
 ```
 
 Where:
 
 - `<devicename>`: Your unique device name/identifier (e.g., `demo`, `device_001`, `factory_line1`)
 - `<category>`: Either `stream` (sensor data) or `state` (control commands)
+- `fmc`: Factory Management Controller namespace
 - `<topic>`: Specific sensor or control name
+
+**STOMP WebSocket Subscriptions** (add `/topic/` prefix):
+
+```
+/topic/protonest/<devicename>/stream/fmc/<sensor>
+/topic/protonest/<devicename>/state/fmc/<control>
+```
+
+**HTTP API Topic Parameter** (just the suffix):
+
+```
+fmc/<sensor>   (e.g., "fmc/temperature", "fmc/vibration")
+```
 
 **Important Conditions**:
 
@@ -102,15 +116,15 @@ Where:
 ### Stream Topic Format
 
 ```
-protonest/<devicename>/stream/<sensor_name>
+protonest/<devicename>/stream/fmc/<sensor_name>
 ```
 
-**Example**: `protonest/demo/stream/temp`
+**Example**: `protonest/demo/stream/fmc/temperature`
 
 **Wildcard Subscription** (to receive all stream data):
 
 ```
-protonest/<devicename>/stream/#
+protonest/<devicename>/stream/fmc/#
 ```
 
 ### Data Format
@@ -120,7 +134,7 @@ All sensor data must be published in **JSON format**. The message will have **Qo
 **Example Payload**:
 
 ```json
-{ "temperature": "30C" }
+{ "temperature": "30" }
 ```
 
 ### Available Sensor Topics
@@ -129,105 +143,115 @@ All sensor data must be published in **JSON format**. The message will have **Qo
 
 **Vibration Sensor**
 
-- Topic: `protonest/<devicename>/stream/vibration`
+- Topic: `protonest/<devicename>/stream/fmc/vibration`
 - Unit: mm/s (millimeters per second)
 - Normal Range: 0 - 7 mm/s
 - Payload Format:
   ```json
   { "vibration": "2.5" }
   ```
-- Example: `protonest/demo/stream/vibration` → `{"vibration":"3.2"}`
+- Example: `protonest/demo/stream/fmc/vibration` → `{"vibration":"3.2"}`
 
 **Pressure Sensor**
 
-- Topic: `protonest/<devicename>/stream/pressure`
-- Unit: bar (or Pa for backend)
-- Normal Range: 3 - 6 bar
+- Topic: `protonest/<devicename>/stream/fmc/pressure`
+- Unit: Pa (Pascals)
+- Normal Range: 95000 - 110000 Pa
 - Payload Format:
   ```json
-  { "pressure": "4.2" }
+  { "pressure": "101325" }
   ```
-- Example: `protonest/demo/stream/pressure` → `{"pressure":"5.1"}`
+- Example: `protonest/demo/stream/fmc/pressure` → `{"pressure":"102000"}`
 
 **Temperature Sensor**
 
-- Topic: `protonest/<devicename>/stream/temp` (or `temperature`)
+- Topic: `protonest/<devicename>/stream/fmc/temperature`
 - Unit: °C (Celsius)
 - Normal Range: 15 - 35°C
 - Payload Format:
   ```json
   { "temperature": "22.5" }
   ```
-- Example (from ProtoNest diagram): `protonest/demo/stream/temp` → `{"temperature":"30C"}`
+- Example: `protonest/demo/stream/fmc/temperature` → `{"temperature":"30"}`
 
 **Humidity Sensor**
 
-- Topic: `protonest/<devicename>/stream/humidity`
+- Topic: `protonest/<devicename>/stream/fmc/humidity`
 - Unit: % (percentage)
 - Normal Range: 30 - 70%
 - Payload Format:
   ```json
   { "humidity": "45.8" }
   ```
-- Example: `protonest/demo/stream/humidity` → `{"humidity":"52.0"}`
+- Example: `protonest/demo/stream/fmc/humidity` → `{"humidity":"52.0"}`
 
 **Noise Level Sensor**
 
-- Topic: `protonest/<devicename>/stream/noise`
+- Topic: `protonest/<devicename>/stream/fmc/noise`
 - Unit: dB (decibels)
 - Normal Range: 0 - 85 dB
 - Payload Format:
   ```json
   { "noise": "65.3" }
   ```
-- Example: `protonest/demo/stream/noise` → `{"noise":"72.0"}`
+- Example: `protonest/demo/stream/fmc/noise` → `{"noise":"72.0"}`
 
 #### 3.2 Air Quality Sensors
 
 **Air Quality Index (AQI)**
 
-- Topic: `protonest/<devicename>/stream/aqi`
+- Topic: `protonest/<devicename>/stream/fmc/aqi`
 - Unit: AQI units (0-500 scale)
 - Normal Range: 0 - 100 (Good to Moderate)
 - Payload Format:
   ```json
   { "aqi": "42" }
   ```
-- Example: `protonest/demo/stream/aqi` → `{"aqi":"35"}`
+- Example: `protonest/demo/stream/fmc/aqi` → `{"aqi":"35"}`
 
 **PM2.5 (Particulate Matter)**
 
-- Topic: `protonest/<devicename>/stream/pm25`
+- Topic: `protonest/<devicename>/stream/fmc/pm25`
 - Unit: µg/m³ (micrograms per cubic meter)
 - Normal Range: 0 - 35 µg/m³
 - Payload Format:
   ```json
   { "pm25": "12.5" }
   ```
-- Example: `protonest/demo/stream/pm25` → `{"pm25":"18.0"}`
+- Example: `protonest/demo/stream/fmc/pm25` → `{"pm25":"18.0"}`
 
 **CO2 (Carbon Dioxide)**
 
-- Topic: `protonest/<devicename>/stream/co2`
+- Topic: `protonest/<devicename>/stream/fmc/co2`
 - Unit: ppm (parts per million)
 - Normal Range: 0 - 1000 ppm
 - Payload Format:
   ```json
   { "co2": "450" }
   ```
-- Example: `protonest/demo/stream/co2` → `{"co2":"520"}`
+- Example: `protonest/demo/stream/fmc/co2` → `{"co2":"520"}`
 
 #### 3.3 Production Data
 
-**Unit Count (RFID Scans)**
+**Unit Count**
 
-- Topic: `protonest/<devicename>/stream/units`
+- Topic: `protonest/<devicename>/stream/fmc/units`
 - Unit: count (integer)
 - Payload Format:
   ```json
-  { "units": "1", "rfidTag": "TAG-12345678", "status": "success" }
+  { "units": "150" }
   ```
-- Example: `protonest/demo/stream/units` → `{"units":"1"}`
+- Example: `protonest/demo/stream/fmc/units` → `{"units":"150"}`
+
+**Product Tracking (increments unit count)**
+
+- Topic: `protonest/<devicename>/stream/fmc/product`
+- Payload Format:
+  ```json
+  { "productID": "PROD-12345", "productName": "Widget A" }
+  ```
+- Example: `protonest/demo/stream/fmc/product` → `{"productID":"PROD-001","productName":"Assembly Unit"}`
+- Note: Each product message increments the local unit count and logs to production history
 
 ---
 
@@ -236,32 +260,32 @@ All sensor data must be published in **JSON format**. The message will have **Qo
 ### State Topic Format
 
 ```
-protonest/<devicename>/state/<control_name>
+protonest/<devicename>/state/fmc/<control_name>
 ```
 
-**Example**: `protonest/demo/state/motor`
+**Example**: `protonest/demo/state/fmc/machineControl`
 
 **Wildcard Subscription** (to receive all state commands):
 
 ```
-protonest/<devicename>/state/#
+protonest/<devicename>/state/fmc/#
 ```
 
 ### Data Format
 
 All state data (control commands) must be published in **JSON format**. Messages will have **QoS 1** and will be **retaining messages** to preserve last known state.
 
-**Example Payload** (from ProtoNest diagram):
+**Example Payload**:
 
 ```json
-{ "state": "ON" }
+{ "status": "RUN" }
 ```
 
 ### Available Control Topics
 
 #### 4.1 Machine Control
 
-**Topic**: `protonest/<devicename>/state/machine_control`
+**Topic**: `protonest/<devicename>/state/fmc/machineControl`
 
 **Subscribe to receive commands from dashboard**:
 
@@ -279,21 +303,15 @@ or
 { "status": "STOP" }
 ```
 
-**Publish current status (your device response)**:
+**Example**: `protonest/demo/state/fmc/machineControl` → Subscribe and publish `{"status":"RUN"}`
 
-```json
-{ "machine_control": { "status": "RUN" } }
-```
+#### 4.2 Ventilation Control
 
-**Example**: `protonest/demo/state/machine_control` → Subscribe and publish `{"status":"RUN"}`
-
-#### 4.2 Ventilation Mode
-
-**Topic**: `protonest/<devicename>/state/ventilation_mode`
+**Topic**: `protonest/<devicename>/state/fmc/ventilation`
 
 **Subscribe to receive commands from dashboard**:
 
-- Modes: auto, manual
+- Modes: auto, manual, off
 
 **Payload received from dashboard**:
 
@@ -301,31 +319,19 @@ or
 { "mode": "auto" }
 ```
 
-**Publish current mode (your device response)**:
+**Example**: `protonest/demo/state/fmc/ventilation` → Subscribe and publish `{"mode":"manual"}`
 
-```json
-{ "ventilation_mode": { "mode": "auto" } }
-```
+#### 4.3 Emergency Stop
 
-**Example**: `protonest/demo/state/ventilation_mode` → Subscribe and publish `{"mode":"manual"}`
-
-#### 4.3 Motor Control (Generic Example from ProtoNest)
-
-**Topic**: `protonest/<devicename>/state/motor`
+**Topic**: `protonest/<devicename>/state/fmc/emergencyStop`
 
 **Payload Format**:
 
 ```json
-{ "state": "ON" }
+{ "emergencyStop": true, "reason": "Safety limit exceeded" }
 ```
 
-or
-
-```json
-{ "state": "OFF" }
-```
-
-**Example** (from ProtoNest diagram): `protonest/demo/state/motor` → `{"state":"ON"}`
+**Note**: Emergency stop events change factory status to "CRITICAL" and require manual acknowledgment.
 
 ---
 
@@ -370,15 +376,15 @@ After connection, subscribe to these topics:
 **Subscribe to all state topics** (recommended):
 
 ```
-protonest/demo/state/#
+protonest/demo/state/fmc/#
 ```
 
 **Or subscribe individually**:
 
 ```
-protonest/demo/state/machine_control
-protonest/demo/state/ventilation_mode
-protonest/demo/state/motor
+protonest/demo/state/fmc/machineControl
+protonest/demo/state/fmc/ventilation
+protonest/demo/state/fmc/emergencyStop
 ```
 
 **QoS**: 1 (At least once delivery)
@@ -389,66 +395,74 @@ Create timed publish scripts for each sensor:
 
 **Vibration Data (publish every 5 seconds)**
 
-- Topic: `protonest/demo/stream/vibration`
+- Topic: `protonest/demo/stream/fmc/vibration`
 - QoS: 1
 - Retain: true
 - Payload: `{"vibration":"2.5"}`
 
 **Temperature Data (publish every 10 seconds)**
 
-- Topic: `protonest/demo/stream/temp`
+- Topic: `protonest/demo/stream/fmc/temperature`
 - QoS: 1
 - Retain: true
 - Payload: `{"temperature":"22.3"}`
 
 **Pressure Data (publish every 10 seconds)**
 
-- Topic: `protonest/demo/stream/pressure`
+- Topic: `protonest/demo/stream/fmc/pressure`
 - QoS: 1
 - Retain: true
-- Payload: `{"pressure":"4.2"}`
+- Payload: `{"pressure":"101325"}`
 
 **Humidity Data (publish every 15 seconds)**
 
-- Topic: `protonest/demo/stream/humidity`
+- Topic: `protonest/demo/stream/fmc/humidity`
 - QoS: 1
 - Retain: true
 - Payload: `{"humidity":"45.8"}`
 
 **Noise Level (publish every 5 seconds)**
 
-- Topic: `protonest/demo/stream/noise`
+- Topic: `protonest/demo/stream/fmc/noise`
 - QoS: 1
 - Retain: true
 - Payload: `{"noise":"65.3"}`
 
 **Air Quality Index (publish every 30 seconds)**
 
-- Topic: `protonest/demo/stream/aqi`
+- Topic: `protonest/demo/stream/fmc/aqi`
 - QoS: 1
 - Retain: true
 - Payload: `{"aqi":"42"}`
 
 **PM2.5 (publish every 30 seconds)**
 
-- Topic: `protonest/demo/stream/pm25`
+- Topic: `protonest/demo/stream/fmc/pm25`
 - QoS: 1
 - Retain: true
 - Payload: `{"pm25":"12.5"}`
 
 **CO2 (publish every 30 seconds)**
 
-- Topic: `protonest/demo/stream/co2`
+- Topic: `protonest/demo/stream/fmc/co2`
 - QoS: 1
 - Retain: true
 - Payload: `{"co2":"450"}`
 
-**Production Unit (publish on each unit produced)**
+**Production Unit Count (publish periodically)**
 
-- Topic: `protonest/demo/stream/units`
+- Topic: `protonest/demo/stream/fmc/units`
+- QoS: 1
+- Retain: true
+- Payload: `{"units":"150"}`
+
+**Product Tracking (publish on each product scan)**
+
+- Topic: `protonest/demo/stream/fmc/product`
 - QoS: 1
 - Retain: false (event-based, not retained)
-- Payload: `{"units":"1","rfidTag":"TAG-12345678","status":"success"}`
+- Payload: `{"productID":"PROD-001","productName":"Assembly Unit"}`
+- Note: Each product message increments unit count in the dashboard
 
 ---
 
@@ -462,8 +476,8 @@ Publish sensor data within normal ranges:
 // Vibration
 {"vibration": "3.2"}
 
-// Pressure
-{"pressure": "4.5"}
+// Pressure (in Pa)
+{"pressure": "101325"}
 
 // Temperature
 {"temperature": "23.5"}
@@ -482,6 +496,9 @@ Publish sensor data within normal ranges:
 
 // CO2
 {"co2": "400"}
+
+// Product (increments units)
+{"productID": "PROD-001", "productName": "Widget A"}
 ```
 
 ### Scenario 2: Critical Alert Conditions
@@ -490,53 +507,55 @@ Publish sensor data exceeding thresholds to trigger alerts:
 
 ```json
 // High Vibration (Critical)
-{"vibration": "8.5"}
+{"vibration": "12.5"}
 
-// High Pressure (Critical)
-{"pressure": "7.2"}
+// High Pressure (Critical > 110000 Pa)
+{"pressure": "115000"}
 
-// High Temperature (Critical)
+// High Temperature (Critical > 40°C)
 {"temperature": "42.0"}
 
-// High Humidity (Warning)
+// High Humidity (Warning > 70%)
 {"humidity": "75.0"}
 
-// High Noise (Warning)
+// High Noise (Warning > 75dB, Critical > 85dB)
 {"noise": "90.0"}
 
-// Poor Air Quality (Warning)
+// Poor Air Quality (Warning > 100, Critical > 150)
 {"aqi": "155"}
 
-// High PM2.5 (Warning)
+// High PM2.5 (Warning > 25, Critical > 35 µg/m³)
 {"pm25": "40.0"}
 
-// High CO2 (Warning)
+// High CO2 (Warning > 800, Critical > 1000 ppm)
 {"co2": "1200"}
 ```
 
 ### Scenario 3: Production Simulation
 
-Simulate RFID scans at random intervals:
+Simulate product scans at random intervals:
+
+**Topic**: `protonest/demo/stream/fmc/product`
 
 ```json
-// Success scan
+// Product scan (increments unit count)
 {
-  "units": "1",
-  "rfidTag": "TAG-00001234",
-  "status": "success"
+  "productID": "PROD-001",
+  "productName": "Assembly Unit"
 }
 
-// Failed scan
+// Another product
 {
-  "units": "0",
-  "rfidTag": "TAG-00001235",
-  "status": "failed"
+  "productID": "PROD-002",
+  "productName": "Widget B"
 }
 ```
 
+**Note**: Each product message automatically increments the unit count and is logged to the production history.
+
 ### Scenario 4: Machine Control Response
 
-When you receive a command on `protonest/demo/state/machine_control`:
+When you receive a command on `protonest/demo/state/fmc/machineControl`:
 
 **Command received**:
 
@@ -550,8 +569,21 @@ When you receive a command on `protonest/demo/state/machine_control`:
 2. Acknowledge by publishing to the same topic:
 
 ```json
-{ "machine_control": { "status": "STOP" } }
+{ "status": "STOP" }
 ```
+
+### Scenario 5: Emergency Stop
+
+**Topic**: `protonest/demo/state/fmc/emergencyStop`
+
+```json
+{
+  "emergencyStop": true,
+  "reason": "Safety limit exceeded"
+}
+```
+
+**Note**: Emergency stop events will change the factory status to "CRITICAL" in the dashboard.
 
 ---
 
@@ -878,10 +910,13 @@ Example: `{"state":"ON"}`, `{"status":"RUN"}`
 - Certificates can be downloaded from ProtoNest Connect website
 - For simulation, use device name `demo` as shown in examples
 - All sensor values should be sent as strings in JSON format
+- STOMP WebSocket subscriptions use `/topic/` prefix
+- HTTP API calls use `fmc/<sensor>` format for topic parameter
 
 ---
 
-**Last Updated**: December 12, 2025  
-**Version**: 2.0  
-**Compatible with**: Factory Management System v1.0  
-**MQTT Broker**: mqtt.protonest.co (Port 8883, SSL/TLS)
+**Last Updated**: January 6, 2026  
+**Version**: 3.0  
+**Compatible with**: Factory Management System v2.0  
+**MQTT Broker**: mqtt.protonest.co (Port 8883, SSL/TLS)  
+**WebSocket**: wss://api.protonestconnect.co/ws

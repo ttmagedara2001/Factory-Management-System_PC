@@ -205,6 +205,48 @@ The dashboard uses simulated data for demonstration:
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
 
+## 🔌 MQTT & API Integration
+
+### WebSocket Connection (STOMP)
+
+The system connects to ProtoNest MQTT broker via STOMP over WebSocket:
+
+```
+wss://api.protonestconnect.co/ws?token=<JWT>
+```
+
+### Topic Format
+
+**STOMP Subscriptions:**
+
+```
+/topic/protonest/<deviceId>/stream/fmc/<sensor>
+/topic/protonest/<deviceId>/state/fmc/<control>
+```
+
+**HTTP API Topic Parameter:**
+
+```
+fmc/<sensor>   (e.g., "fmc/temperature", "fmc/vibration")
+```
+
+### Available Topics
+
+| Type   | Topic Suffix         | Description                         |
+| ------ | -------------------- | ----------------------------------- |
+| Stream | `fmc/temperature`    | Temperature in °C                   |
+| Stream | `fmc/humidity`       | Humidity %                          |
+| Stream | `fmc/vibration`      | Vibration in mm/s                   |
+| Stream | `fmc/pressure`       | Pressure in Pa                      |
+| Stream | `fmc/noise`          | Noise level in dB                   |
+| Stream | `fmc/co2`            | CO2 in ppm                          |
+| Stream | `fmc/aqi`            | Air Quality Index                   |
+| Stream | `fmc/units`          | Production unit count               |
+| Stream | `fmc/product`        | Product tracking (increments units) |
+| State  | `fmc/machineControl` | Machine RUN/STOP/IDLE               |
+| State  | `fmc/ventilation`    | Ventilation mode                    |
+| State  | `fmc/emergencyStop`  | Emergency stop events               |
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please follow these steps:
@@ -236,10 +278,13 @@ This project is licensed under the MIT License.
 
 For detailed documentation, see:
 
-- [Componentss Documentation](./ComponentsS_README.md)
+- [MQTT Configuration Guide](./MQTT_CONFIGURATION.md)
+- [WebSocket Setup Guide](./WEBSOCKET_SETUP.md)
+- [IoT Device Configuration](./IOT_DEVICE_CONFIGURATION.md)
 - [Tailwind Setup Guide](./TAILWIND_SETUP.md)
-- [Chart Enhancements](./CHART_ENHANCEMENTS.md)
 
 ---
 
 **Built with ❤️ for modern factory monitoring**
+
+**Last Updated**: January 6, 2026

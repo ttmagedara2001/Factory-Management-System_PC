@@ -23,34 +23,45 @@ const secretKey = "your-secret-key-from-protonest-dashboard"; // REPLACE with yo
 
 ### 2. Topic Structure
 
-The system subscribes to MQTT topics with the following format:
+The system uses STOMP over WebSocket with the following topic formats:
 
-**Stream Topics (Sensor Data):**
+**STOMP Subscriptions (Stream Topics - Sensor Data):**
 
 ```
-protonest/<deviceId>/stream/fcm/<sensor>
+/topic/protonest/<deviceId>/stream/fmc/<sensor>
 ```
 
 Supported sensors:
 
 - `temperature` - Temperature in Celsius
 - `humidity` - Humidity percentage
-- `co2` - CO2 percentage
+- `co2` - CO2 in ppm
 - `vibration` - Vibration in mm/s
-- `pressure` - Pressure in bar
+- `pressure` - Pressure in Pa
 - `noise` - Noise level in dB
-- `aqi` - Air Quality Index (or auto-calculated)
+- `aqi` - Air Quality Index
+- `units` - Production unit count
+- `product` - Product tracking (JSON payload)
 
-**State Topics (Control Commands):**
+**STOMP Subscriptions (State Topics - Control Commands):**
 
 ```
-protonest/<deviceId>/state/fcm/<command>
+/topic/protonest/<deviceId>/state/fmc/<command>
 ```
 
 Supported commands:
 
-- `machine_control` - Machine control (RUN/STOP)
-- `ventilation_mode` - Ventilation mode (auto/off)
+- `machineControl` - Machine control (RUN/STOP/IDLE)
+- `ventilation` - Ventilation mode (auto/off)
+- `emergencyStop` - Emergency stop events
+
+**HTTP API Topic Parameter:**
+
+When fetching historical data via HTTP API, use the topic suffix:
+
+```
+fmc/<sensor>   (e.g., "fmc/temperature", "fmc/vibration")
+```
 
 ### 3. Mock Devices
 
@@ -177,16 +188,51 @@ simulateSensorData("humidity", 65);
 simulateSensorData("co2", 45);
 ```
 
+## HTTP API Format
+
+### Historical Data Request
+
+```javascript
+POST /get-stream-data/device/topic
+Headers: { "X-Token": "<jwt-token>" }
+Body: {
+  "deviceId": "<deviceId>",
+  "topic": "fmc/<sensor>",      // e.g., "fmc/temperature", "fmc/vibration"
+  "startTime": "<ISO-8601>",    // e.g., "2025-01-01T00:00:00Z"
+  "endTime": "<ISO-8601>",      // e.g., "2025-01-06T23:59:59Z"
+  "pagination": "0",
+  "pageSize": "100"
+}
+```
+
+### State Update Request
+
+```javascript
+POST /update-state-details
+Headers: { "X-Token": "<jwt-token>" }
+Body: {
+  "deviceId": "<deviceId>",
+  "topic": "fmc/<control>",     // e.g., "fmc/machineControl", "fmc/ventilation"
+  "payload": { "status": "RUN" }
+}
+```
+
 ## Message Format
 
 **Incoming Stream Message:**
 
 ```json
 {
-  "payload": {
-    "temperature": "24.5"
-  },
-  "timestamp": "2025-12-15T10:30:00Z"
+  "temperature": "24.5"
+}
+```
+
+**Incoming Product Message (for unit tracking):**
+
+```json
+{
+  "productID": "PROD-12345",
+  "productName": "Widget A"
 }
 ```
 
@@ -194,10 +240,16 @@ simulateSensorData("co2", 45);
 
 ```json
 {
-  "payload": {
-    "machine_control": "RUN"
-  },
-  "timestamp": "2025-12-15T10:30:00Z"
+  "status": "RUN"
+}
+```
+
+**Emergency Stop Message:**
+
+```json
+{
+  "emergencyStop": true,
+  "reason": "Safety limit exceeded"
 }
 ```
 
@@ -205,7 +257,7 @@ simulateSensorData("co2", 45);
 
 ```json
 {
-  "machine_control": "STOP"
+  "status": "STOP"
 }
 ```
 
@@ -223,7 +275,8 @@ simulateSensorData("co2", 45);
 **Problem:** No data received
 
 - Verify device is publishing to correct topics
-- Check topic format: `protonest/<deviceId>/stream/fcm/<sensor>`
+- Check STOMP topic format: `/topic/protonest/<deviceId>/stream/fmc/<sensor>`
+- Check HTTP API topic format: `fmc/<sensor>`
 - Use `wsInfo()` to see active subscriptions
 - Check if device is online in ProtoNest Dashboard
 
@@ -301,5 +354,10 @@ For issues or questions:
 1. Check browser console for errors
 2. Verify topic structure matches documentation
 3. Test with ProtoNest Dashboard first
-4. Review MQTT_WEBSOCKET_INTEGRATION.md
+4. Review MQTT_CONFIGURATION.md
 5. Check ProtoNest API documentation
+
+---
+
+**Last Updated**: January 6, 2026
+**Version**: 2.0.0

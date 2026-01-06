@@ -196,21 +196,21 @@ const SettingsWindow = ({
   ) : null;
 
   return (
-    <div className="p-4 sm:p-6 max-w-[1400px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 max-w-[1400px] mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
         <div className="flex items-center gap-2">
-          <Settings size={22} className="text-slate-600" />
-          <h1 className="text-lg font-bold text-slate-800 uppercase tracking-wide">Threshold Settings</h1>
+          <Settings size={20} className="sm:w-[22px] sm:h-[22px] text-slate-600" />
+          <h1 className="text-base sm:text-lg font-bold text-slate-800 uppercase tracking-wide">Threshold Settings</h1>
         </div>
       </div>
 
-      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4 rounded-lg">
+      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-2 sm:p-3 mb-4 rounded-lg">
         <div className="flex items-start gap-2">
-          <AlertTriangle size={16} className="text-yellow-600 mt-0.5" />
+          <AlertTriangle size={14} className="sm:w-4 sm:h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-xs font-semibold text-yellow-800">Critical Alert Configuration</p>
-            <p className="text-[10px] text-yellow-700 mt-0.5">
+            <p className="text-[10px] sm:text-xs font-semibold text-yellow-800">Critical Alert Configuration</p>
+            <p className="text-[9px] sm:text-[10px] text-yellow-700 mt-0.5">
               Set threshold values to trigger critical alerts. When values exceed critical thresholds, 
               indicators will turn red and alerts will be generated.
             </p>
@@ -219,19 +219,19 @@ const SettingsWindow = ({
       </div>
 
       {/* Machine Control Section */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 mb-4">
-        <h3 className="text-xs font-bold text-slate-800 uppercase mb-3 pb-2 border-b border-slate-200">
+      <div className="bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-slate-100 mb-4">
+        <h3 className="text-[10px] sm:text-xs font-bold text-slate-800 uppercase mb-3 pb-2 border-b border-slate-200">
           Machine Control
         </h3>
         
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0">
           {/* Control Mode Toggle */}
           <div>
-            <label className="block text-[10px] font-semibold text-slate-600 mb-2">Control Mode</label>
+            <label className="block text-[9px] sm:text-[10px] font-semibold text-slate-600 mb-2">Control Mode</label>
             <div className="flex items-center gap-2 bg-slate-100 p-0.5 rounded-lg">
               <button
                 onClick={() => handleControlModeChange('auto')}
-                className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all duration-300 ${
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold transition-all duration-300 ${
                   controlMode === 'auto'
                     ? 'bg-green-500 text-white shadow-md'
                     : 'text-slate-600 hover:text-slate-800'
@@ -241,7 +241,7 @@ const SettingsWindow = ({
               </button>
               <button
                 onClick={() => handleControlModeChange('manual')}
-                className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all duration-300 ${
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold transition-all duration-300 ${
                   controlMode === 'manual'
                     ? 'bg-blue-500 text-white shadow-md'
                     : 'text-slate-600 hover:text-slate-800'
@@ -254,11 +254,11 @@ const SettingsWindow = ({
 
           {/* Machine Control Button */}
           <div>
-            <label className="block text-[10px] font-semibold text-slate-600 mb-2">Machine Status</label>
+            <label className="block text-[9px] sm:text-[10px] font-semibold text-slate-600 mb-2">Machine Status</label>
             <button
               onClick={handleMachineToggle}
               disabled={controlMode === 'auto' || isEmergencyStopped}
-              className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold text-white transition-all duration-300 text-xs ${
+              className={`flex items-center gap-2 px-4 sm:px-6 py-1.5 sm:py-2 rounded-lg font-bold text-white transition-all duration-300 text-[10px] sm:text-xs ${
                 controlMode === 'auto' || isEmergencyStopped
                   ? 'bg-slate-300 cursor-not-allowed'
                   : machineStatus === 'running'
@@ -268,12 +268,12 @@ const SettingsWindow = ({
             >
               {machineStatus === 'running' ? (
                 <>
-                  <Square size={16} fill="white" />
+                  <Square size={14} fill="white" />
                   <span>STOP</span>
                 </>
               ) : (
                 <>
-                  <Play size={16} fill="white" />
+                  <Play size={14} fill="white" />
                   <span>START</span>
                 </>
               )}

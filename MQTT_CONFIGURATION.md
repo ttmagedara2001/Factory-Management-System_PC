@@ -61,43 +61,69 @@ export const MOCK_DEVICES = [
 
 ### Format
 
+The system uses two topic formats:
+
+**1. STOMP WebSocket Subscriptions (with /topic/ prefix):**
+
 ```
-protonest/<deviceId>/<topic>/fcm/<suffix>
+/topic/protonest/<deviceId>/stream/fmc/<sensor>
+/topic/protonest/<deviceId>/state/fmc/<control>
+```
+
+**2. HTTP API Calls (topic parameter):**
+
+```
+fmc/<sensor>   (e.g., "fmc/temperature", "fmc/vibration")
 ```
 
 ### Stream Topics (Sensor Data)
 
 Subscribe to real-time sensor streams:
 
-| Topic Type | Suffix        | Data Type | Description            |
-| ---------- | ------------- | --------- | ---------------------- |
-| Stream     | `temperature` | Float     | Temperature in °C      |
-| Stream     | `humidity`    | Float     | Humidity percentage    |
-| Stream     | `co2`         | Float     | CO2 level percentage   |
-| Stream     | `vibration`   | Float     | Vibration in mm/s      |
-| Stream     | `noise`       | Float     | Noise level in dB      |
-| Stream     | `pressure`    | Float     | Pressure in bar        |
-| Stream     | `airQuality`  | Integer   | Calculated AQI (0-100) |
+| Topic Type | Sensor        | Data Type | Description           |
+| ---------- | ------------- | --------- | --------------------- |
+| Stream     | `temperature` | Float     | Temperature in °C     |
+| Stream     | `humidity`    | Float     | Humidity percentage   |
+| Stream     | `co2`         | Float     | CO2 level in ppm      |
+| Stream     | `vibration`   | Float     | Vibration in mm/s     |
+| Stream     | `noise`       | Float     | Noise level in dB     |
+| Stream     | `pressure`    | Float     | Pressure in Pa        |
+| Stream     | `aqi`         | Integer   | Air Quality Index     |
+| Stream     | `units`       | Integer   | Production unit count |
+| Stream     | `product`     | JSON      | Product tracking data |
 
-**Example Stream Topic:**
+**STOMP Subscription Example:**
 
 ```
-protonest/device9988/stream/fcm/temperature
+/topic/protonest/device9988/stream/fmc/temperature
+```
+
+**HTTP API Topic Parameter:**
+
+```
+fmc/temperature
 ```
 
 ### State Topics (Control Commands)
 
 Publish/subscribe to machine state:
 
-| Topic Type | Suffix           | Data Type      | Description                      |
-| ---------- | ---------------- | -------------- | -------------------------------- |
-| State      | `ventilation`    | Boolean/String | Ventilation control (on/off)     |
-| State      | `machineControl` | String         | Machine status (running/stopped) |
+| Topic Type | Control          | Data Type      | Description                    |
+| ---------- | ---------------- | -------------- | ------------------------------ |
+| State      | `ventilation`    | Boolean/String | Ventilation control (on/off)   |
+| State      | `machineControl` | String         | Machine status (RUN/STOP/IDLE) |
+| State      | `emergencyStop`  | JSON           | Emergency stop with reason     |
 
-**Example State Topic:**
+**STOMP Subscription Example:**
 
 ```
-protonest/device9988/state/fcm/machineControl
+/topic/protonest/device9988/state/fmc/machineControl
+```
+
+**HTTP API Topic Parameter:**
+
+```
+fmc/machineControl
 ```
 
 ## Air Quality Index (AQI) Calculation
@@ -207,8 +233,9 @@ co2Score = max(0, 100 - (co2 × 2))
 User clicks "MANUAL"
 → Enable machine control button
 → User clicks "STOP MACHINE"
-→ Publish to: protonest/<deviceId>/state/fcm/machineControl
-→ All devices receive command
+→ HTTP POST to /update-state-details with topic: "fmc/machineControl"
+→ Backend publishes to MQTT: protonest/<deviceId>/state/fmc/machineControl
+→ STOMP subscription receives on: /topic/protonest/<deviceId>/state/fmc/machineControl
 → UI updates to show "STOPPED" status
 ```
 
@@ -230,8 +257,23 @@ npm run dev
 ### Publishing Test Data (MQTT.fx or similar)
 
 ```
-Topic: protonest/device9988/stream/fcm/temperature
-Payload: {"payload": {"temperature": "25.5"}, "timestamp": "2025-12-15T10:30:00Z"}
+Topic: protonest/device9988/stream/fmc/temperature
+Payload: {"temperature": "25.5"}
+```
+
+### HTTP API Test (Historical Data)
+
+```json
+POST /get-stream-data/device/topic
+Headers: { "X-Token": "<jwt-token>" }
+Body: {
+  "deviceId": "device9988",
+  "topic": "fmc/temperature",
+  "startTime": "2025-01-01T00:00:00Z",
+  "endTime": "2025-01-06T23:59:59Z",
+  "pagination": "0",
+  "pageSize": "100"
+}
 ```
 
 ## Troubleshooting
@@ -298,5 +340,5 @@ For issues with:
 
 ---
 
-**Last Updated**: December 15, 2025
-**Version**: 1.0.0
+**Last Updated**: January 6, 2026
+**Version**: 2.0.0
