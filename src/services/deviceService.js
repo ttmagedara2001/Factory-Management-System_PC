@@ -187,46 +187,51 @@ export const getStateDetailsForDevice = async (deviceId) => {
  * - machine_control: Set machine to RUN/STOP/IDLE
  * - ventilation_mode: Switch between auto/manual ventilation
  *
+ * The topic should be in format "fmc/<control>" (e.g., "fmc/machineControl", "fmc/ventilation")
+ *
  * The backend forwards these updates to the MQTT broker,
  * which publishes to: protonest/<deviceId>/state/fmc/<topic>
  *
  * Used by: ControlsPanel for machine start/stop and ventilation control
  *
  * @param {string} deviceId - Factory device ID (e.g., "device_001")
- * @param {string} topic - State topic name ("machine_control" or "ventilation_mode")
+ * @param {string} topic - State topic name (e.g., "machineControl", "ventilation") - auto-prefixed with "fmc/"
  * @param {object} payload - Key-value pairs for the state update
  * @returns {Promise<Object>} Response confirming state update
  *
  * Example usage:
  * // Start the machine
- * await updateStateDetails("device_001", "machine_control", { status: "RUN" });
+ * await updateStateDetails("device_001", "machineControl", { status: "RUN" });
  *
  * // Switch ventilation to manual mode
- * await updateStateDetails("device_001", "ventilation_mode", { mode: "manual" });
+ * await updateStateDetails("device_001", "ventilation", { mode: "manual" });
  */
 export const updateStateDetails = async (deviceId, topic, payload) => {
   try {
+    // Ensure topic has the correct fmc/ prefix
+    const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
+
     console.log(
-      `🎛️ [HTTP API] Updating state for ${deviceId}/${topic}:`,
+      `🎛️ [HTTP API] Updating state for ${deviceId}/${formattedTopic}:`,
       payload
     );
 
     const response = await api.post("/update-state-details", {
       deviceId,
-      topic,
+      topic: formattedTopic,
       payload,
     });
 
     if (response.data.status === "Success") {
       console.log(
-        `✅ [HTTP API] Successfully updated ${topic} for ${deviceId}`
+        `✅ [HTTP API] Successfully updated ${formattedTopic} for ${deviceId}`
       );
     }
 
     return response.data;
   } catch (error) {
     console.error(
-      `❌ [HTTP API] Failed to update state ${topic} for ${deviceId}:`,
+      `❌ [HTTP API] Failed to update state ${formattedTopic} for ${deviceId}:`,
       {
         status: error.response?.status,
         statusText: error.response?.statusText,
@@ -253,11 +258,13 @@ export const updateStateDetails = async (deviceId, topic, payload) => {
  * Fetches time-series data for ONE specific sensor:
  * - vibration, pressure, temperature, humidity, noise, aqi, pm25, co2, units
  *
+ * Topic format: "fmc/<sensor>" (e.g., "fmc/vibration", "fmc/temperature")
+ *
  * This is more targeted than getStreamDataForDevice() which fetches all topics.
  * Use this when you only need data for a specific sensor.
  *
  * @param {string} deviceId - Factory device ID (e.g., "device_001")
- * @param {string} topic - Sensor topic name (e.g., "vibration", "temperature")
+ * @param {string} topic - Sensor topic name (e.g., "vibration", "temperature") - auto-prefixed with "fmc/"
  * @param {string} startTime - ISO-8601 format (e.g., "2025-10-24T00:00:00Z")
  * @param {string} endTime - ISO-8601 format (e.g., "2025-10-27T00:00:00Z")
  * @param {number} pagination - Page number (default: 0)
@@ -271,7 +278,7 @@ export const updateStateDetails = async (deviceId, topic, payload) => {
  *     {
  *       id: "d94a68a3-3d52-4333-a18a-6cb5a474856e",
  *       deviceId: "device_001",
- *       topicSuffix: "vibration",
+ *       topicSuffix: "fmc/vibration",
  *       payload: "2.5",
  *       timestamp: "2025-10-25T18:53:10.980294Z"
  *     },
@@ -288,12 +295,17 @@ export const getStreamDataByTopic = async (
   pageSize = 100
 ) => {
   try {
-    console.log(`📊 [HTTP API] Fetching ${topic} data for ${deviceId}`);
+    // Ensure topic has the correct fmc/ prefix
+    const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
+
+    console.log(
+      `📊 [HTTP API] Fetching ${formattedTopic} data for ${deviceId}`
+    );
     console.log(`⏰ [HTTP API] Time range: ${startTime} to ${endTime}`);
 
     const response = await api.post("/get-stream-data/device/topic", {
       deviceId,
-      topic,
+      topic: formattedTopic,
       startTime,
       endTime,
       pagination: pagination.toString(), // API requires string format
@@ -303,13 +315,13 @@ export const getStreamDataByTopic = async (
     if (response.data.status === "Success") {
       const recordCount = response.data.data?.length || 0;
       console.log(
-        `✅ [HTTP API] Retrieved ${recordCount} records for ${topic}`
+        `✅ [HTTP API] Retrieved ${recordCount} records for ${formattedTopic}`
       );
 
       // Log sample record for debugging
       if (recordCount > 0) {
         console.log(
-          `📋 [HTTP API] Sample ${topic} record:`,
+          `📋 [HTTP API] Sample ${formattedTopic} record:`,
           response.data.data[0]
         );
       }
@@ -318,7 +330,7 @@ export const getStreamDataByTopic = async (
     return response.data;
   } catch (error) {
     console.error(
-      `❌ [HTTP API] Failed to get ${topic} data for ${deviceId}:`,
+      `❌ [HTTP API] Failed to get ${formattedTopic} data for ${deviceId}:`,
       {
         status: error.response?.status,
         statusText: error.response?.statusText,
@@ -336,14 +348,16 @@ export const getStreamDataByTopic = async (
  * Endpoint: POST /get-state-details/device/topic
  *
  * Retrieves the current state for ONE specific topic:
- * - machine_control: Get current machine status (RUN/STOP/IDLE)
- * - ventilation_mode: Get current ventilation mode (auto/manual)
+ * - machineControl: Get current machine status (RUN/STOP/IDLE)
+ * - ventilation: Get current ventilation mode (auto/manual)
+ *
+ * Topic format: "fmc/<control>" (e.g., "fmc/machineControl", "fmc/ventilation")
  *
  * This is more targeted than getStateDetailsForDevice() which fetches all states.
  * Use this when you only need one specific state value.
  *
  * @param {string} deviceId - Factory device ID (e.g., "device_001")
- * @param {string} topic - State topic name (e.g., "machine_control", "ventilation_mode")
+ * @param {string} topic - State topic name (e.g., "machineControl", "ventilation") - auto-prefixed with "fmc/"
  * @returns {Promise<Object>} Response with current state value
  *
  * Example response:
@@ -359,16 +373,21 @@ export const getStreamDataByTopic = async (
  */
 export const getStateDetailsByTopic = async (deviceId, topic) => {
   try {
-    console.log(`🎛️ [HTTP API] Fetching ${topic} state for ${deviceId}`);
+    // Ensure topic has the correct fmc/ prefix
+    const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
+
+    console.log(
+      `🎛️ [HTTP API] Fetching ${formattedTopic} state for ${deviceId}`
+    );
 
     const response = await api.post("/get-state-details/device/topic", {
       deviceId,
-      topic,
+      topic: formattedTopic,
     });
 
     if (response.data.status === "Success") {
       console.log(
-        `✅ [HTTP API] Retrieved ${topic} state:`,
+        `✅ [HTTP API] Retrieved ${formattedTopic} state:`,
         response.data.data
       );
     }
@@ -376,7 +395,7 @@ export const getStateDetailsByTopic = async (deviceId, topic) => {
     return response.data;
   } catch (error) {
     console.error(
-      `❌ [HTTP API] Failed to get ${topic} state for ${deviceId}:`,
+      `❌ [HTTP API] Failed to get ${formattedTopic} state for ${deviceId}:`,
       {
         status: error.response?.status,
         statusText: error.response?.statusText,
@@ -408,7 +427,7 @@ export const getCurrentUnitsFromBackend = async (deviceId) => {
 
     const response = await api.post("/get-stream-data/device/topic", {
       deviceId,
-      topicSuffix: "units",
+      topic: "fmc/units", // Correct MQTT suffix format
       startTime: startOfDay.toISOString(),
       endTime: now.toISOString(),
       pagination: "0",
@@ -454,11 +473,13 @@ export const getCurrentUnitsFromBackend = async (deviceId) => {
 // 2. Real-time Data: WebSocket → STOMP subscriptions → State updates → Displays
 // 3. Control Commands: User interaction → updateStateDetails() → HTTP API → MQTT broker → Device
 //
-// MQTT Topic Format:
-// - Stream data: protonest/<deviceId>/stream/<sensor>
-//   Example: protonest/device_001/stream/vibration
-// - State data: protonest/<deviceId>/state/<topic>
-//   Example: protonest/device_001/state/machine_control
+// MQTT Topic Format (for API calls):
+// - Stream data topic: "fmc/<sensor>" (e.g., "fmc/vibration", "fmc/temperature")
+// - State data topic: "fmc/<control>" (e.g., "fmc/machineControl", "fmc/ventilation")
+//
+// Full MQTT Paths (on broker):
+// - Stream: protonest/<deviceId>/stream/fmc/<sensor>
+// - State: protonest/<deviceId>/state/fmc/<control>
 //
 // Sensor Threshold Monitoring (Frontend only):
 // - Vibration: Critical > 10 mm/s, Warning > 5 mm/s

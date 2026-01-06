@@ -35,17 +35,17 @@ export const getTimeRange = (range) => {
   let startDate;
 
   const rangeMs = {
-    '1m': 1 * 60 * 1000,
-    '5m': 5 * 60 * 1000,
-    '15m': 15 * 60 * 1000,
-    '1h': 60 * 60 * 1000,
-    '6h': 6 * 60 * 60 * 1000,
-    '24h': 24 * 60 * 60 * 1000,
-    '7d': 7 * 24 * 60 * 60 * 1000,
-    '30d': 30 * 24 * 60 * 60 * 1000,
+    "1m": 1 * 60 * 1000,
+    "5m": 5 * 60 * 1000,
+    "15m": 15 * 60 * 1000,
+    "1h": 60 * 60 * 1000,
+    "6h": 6 * 60 * 60 * 1000,
+    "24h": 24 * 60 * 60 * 1000,
+    "7d": 7 * 24 * 60 * 60 * 1000,
+    "30d": 30 * 24 * 60 * 60 * 1000,
   };
 
-  startDate = new Date(now.getTime() - (rangeMs[range] || rangeMs['24h']));
+  startDate = new Date(now.getTime() - (rangeMs[range] || rangeMs["24h"]));
 
   return {
     startTime: formatISODate(startDate),
@@ -60,6 +60,11 @@ export const getTimeRange = (range) => {
 /**
  * Get stream data for a specific device and topic
  * POST /get-stream-data/device/topic
+ *
+ * Topic format should be the MQTT suffix after stream, e.g.:
+ * - "fmc/vibration" for vibration sensor
+ * - "fmc/temperature" for temperature sensor
+ * - "fmc/units" for production units
  */
 export const getStreamDataByTopic = async (
   deviceId,
@@ -70,12 +75,17 @@ export const getStreamDataByTopic = async (
   pageSize = 100
 ) => {
   try {
-    console.log(`📊 [Historical] Fetching ${topic} data for ${deviceId}`);
+    // Ensure topic has the correct fmc/ prefix
+    const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
+
+    console.log(
+      `📊 [Historical] Fetching ${formattedTopic} data for ${deviceId}`
+    );
     console.log(`⏰ [Historical] Time range: ${startTime} to ${endTime}`);
 
     const response = await api.post("/get-stream-data/device/topic", {
       deviceId,
-      topic,
+      topic: formattedTopic,
       startTime,
       endTime,
       pagination: String(pagination),
@@ -84,7 +94,9 @@ export const getStreamDataByTopic = async (
 
     if (response.data.status === "Success") {
       const recordCount = response.data.data?.length || 0;
-      console.log(`✅ [Historical] Retrieved ${recordCount} records for ${topic}`);
+      console.log(
+        `✅ [Historical] Retrieved ${recordCount} records for ${formattedTopic}`
+      );
       return response.data.data || [];
     }
 
@@ -121,7 +133,9 @@ export const getStreamDataForDevice = async (
     });
 
     if (response.data.status === "Success") {
-      console.log(`✅ [Historical] Retrieved ${response.data.data?.length || 0} records`);
+      console.log(
+        `✅ [Historical] Retrieved ${response.data.data?.length || 0} records`
+      );
       return response.data.data || [];
     }
 
@@ -156,7 +170,11 @@ export const getStreamDataForUser = async (
     });
 
     if (response.data.status === "Success") {
-      console.log(`✅ [Historical] Retrieved ${response.data.data?.length || 0} user records`);
+      console.log(
+        `✅ [Historical] Retrieved ${
+          response.data.data?.length || 0
+        } user records`
+      );
       return response.data.data || [];
     }
 
@@ -173,7 +191,9 @@ export const getStreamDataForUser = async (
  */
 export const deleteStreamDataById = async (deviceId, topic, dataIds) => {
   try {
-    console.log(`🗑️ [Historical] Deleting ${dataIds.length} records for ${deviceId}/${topic}`);
+    console.log(
+      `🗑️ [Historical] Deleting ${dataIds.length} records for ${deviceId}/${topic}`
+    );
 
     const response = await api.delete("/delete-stream-data-by-id", {
       data: {
@@ -201,7 +221,9 @@ export const deleteStreamDataById = async (deviceId, topic, dataIds) => {
  */
 export const deleteStateTopic = async (deviceId, topic) => {
   try {
-    console.log(`🗑️ [Historical] Deleting state topic ${topic} for ${deviceId}`);
+    console.log(
+      `🗑️ [Historical] Deleting state topic ${topic} for ${deviceId}`
+    );
 
     const response = await api.delete("/delete-state-topic", {
       data: {
@@ -228,26 +250,38 @@ export const deleteStateTopic = async (deviceId, topic) => {
 
 /**
  * Fetch production volume data (units topic)
- * @param {string} deviceId 
- * @param {string} startTime 
- * @param {string} endTime 
+ * @param {string} deviceId
+ * @param {string} startTime
+ * @param {string} endTime
  * @returns {Promise<Array>} Array of { date, produced, target }
  */
 export const getProductionVolumeData = async (deviceId, startTime, endTime) => {
   try {
-    const data = await getStreamDataByTopic(deviceId, "units", startTime, endTime, 0, 500);
-    
+    const data = await getStreamDataByTopic(
+      deviceId,
+      "units",
+      startTime,
+      endTime,
+      0,
+      500
+    );
+
     // Group data by date
     const dailyData = new Map();
-    
+
     data.forEach((record) => {
       const timestamp = record.timestamp || record.time;
-      const date = timestamp ? timestamp.split("T")[0] : new Date().toISOString().split("T")[0];
-      
+      const date = timestamp
+        ? timestamp.split("T")[0]
+        : new Date().toISOString().split("T")[0];
+
       let value = 0;
       if (record.payload) {
         try {
-          const parsed = typeof record.payload === "string" ? JSON.parse(record.payload) : record.payload;
+          const parsed =
+            typeof record.payload === "string"
+              ? JSON.parse(record.payload)
+              : record.payload;
           value = Number(parsed.units || parsed.value || parsed) || 0;
         } catch {
           value = Number(record.payload) || 0;
@@ -255,20 +289,22 @@ export const getProductionVolumeData = async (deviceId, startTime, endTime) => {
       } else if (record.value !== undefined) {
         value = Number(record.value) || 0;
       }
-      
+
       if (!dailyData.has(date)) {
         dailyData.set(date, { date, produced: 0, target: 1024 }); // Default target 1024
       }
-      
+
       dailyData.get(date).produced += value;
     });
-    
+
     // Convert to sorted array
-    const result = Array.from(dailyData.values()).sort((a, b) => 
-      new Date(a.date) - new Date(b.date)
+    const result = Array.from(dailyData.values()).sort(
+      (a, b) => new Date(a.date) - new Date(b.date)
     );
-    
-    console.log(`📊 [Production] Processed ${result.length} daily production records`);
+
+    console.log(
+      `📊 [Production] Processed ${result.length} daily production records`
+    );
     return result;
   } catch (error) {
     console.error(`❌ [Production] Error:`, error.message);
@@ -286,11 +322,11 @@ const MTBF_STORAGE_KEY = "factory_mtbf_data";
 /**
  * OEE (Overall Equipment Effectiveness) Calculation
  * OEE = Availability × Performance × Quality
- * 
+ *
  * - Availability = Run Time / Planned Production Time
  * - Performance = (Ideal Cycle Time × Total Count) / Run Time
  * - Quality = Good Count / Total Count
- * 
+ *
  * Initially 0 until data is available
  */
 export const calculateOEE = (availability, performance, quality) => {
@@ -298,8 +334,8 @@ export const calculateOEE = (availability, performance, quality) => {
   const a = Math.min(availability, 100) / 100;
   const p = Math.min(performance, 100) / 100;
   const q = Math.min(quality, 100) / 100;
-  
-  return (a * p * q) * 100; // Return as percentage
+
+  return a * p * q * 100; // Return as percentage
 };
 
 /**
@@ -323,18 +359,18 @@ export const getOEEHistory = () => {
 export const saveOEEDataPoint = (dataPoint) => {
   try {
     const history = getOEEHistory();
-    
+
     // Add new data point
     history.push({
       ...dataPoint,
       timestamp: dataPoint.timestamp || new Date().toISOString(),
     });
-    
+
     // Keep only last 100 data points
     if (history.length > 100) {
       history.splice(0, history.length - 100);
     }
-    
+
     localStorage.setItem(OEE_STORAGE_KEY, JSON.stringify(history));
     console.log(`💾 [OEE] Saved data point. Total: ${history.length}`);
     return history;
@@ -356,23 +392,24 @@ export const calculateAndStoreOEE = (productionData, machineState = {}) => {
     runTime = 0,
     idealCycleTime = 1, // minutes per unit
   } = productionData;
-  
+
   // Calculate components
   const availability = plannedTime > 0 ? (runTime / plannedTime) * 100 : 0;
-  const performance = runTime > 0 ? ((idealCycleTime * totalUnits) / runTime) * 100 : 0;
+  const performance =
+    runTime > 0 ? ((idealCycleTime * totalUnits) / runTime) * 100 : 0;
   const quality = totalUnits > 0 ? (goodUnits / totalUnits) * 100 : 100;
-  
+
   const oee = calculateOEE(availability, performance, quality);
-  
+
   const dataPoint = {
     week: new Date().toISOString().split("T")[0],
     oee: Math.round(oee * 10) / 10, // Round to 1 decimal
     availability: Math.round(availability * 10) / 10,
     performance: Math.round(performance * 10) / 10,
     quality: Math.round(quality * 10) / 10,
-    machineState: machineState.status || 'unknown',
+    machineState: machineState.status || "unknown",
   };
-  
+
   return saveOEEDataPoint(dataPoint);
 };
 
@@ -382,34 +419,36 @@ export const calculateAndStoreOEE = (productionData, machineState = {}) => {
  */
 export const getOEEChartData = () => {
   const history = getOEEHistory();
-  
+
   if (history.length === 0) {
     // Return initial state with 0 OEE
-    return [{
-      week: new Date().toISOString().split("T")[0],
-      oee: 0,
-    }];
+    return [
+      {
+        week: new Date().toISOString().split("T")[0],
+        oee: 0,
+      },
+    ];
   }
-  
+
   // Group by week
   const weeklyData = new Map();
-  
+
   history.forEach((record) => {
     const date = new Date(record.timestamp || record.week);
     // Get start of week (Sunday)
     const startOfWeek = new Date(date);
     startOfWeek.setDate(date.getDate() - date.getDay());
     const weekKey = startOfWeek.toISOString().split("T")[0];
-    
+
     if (!weeklyData.has(weekKey)) {
       weeklyData.set(weekKey, { week: weekKey, oeeSum: 0, count: 0 });
     }
-    
+
     const week = weeklyData.get(weekKey);
     week.oeeSum += record.oee || 0;
     week.count += 1;
   });
-  
+
   // Calculate averages and sort
   return Array.from(weeklyData.values())
     .map((w) => ({
@@ -441,40 +480,49 @@ export const getMTBFData = () => {
 /**
  * Record a failure event
  */
-export const recordFailure = (deviceId, failureType, timestamp = new Date().toISOString()) => {
+export const recordFailure = (
+  deviceId,
+  failureType,
+  timestamp = new Date().toISOString()
+) => {
   try {
     const data = getMTBFData();
-    
+
     data.failures.push({
       deviceId,
       failureType,
       timestamp,
     });
-    
+
     // Keep only last 50 failures
     if (data.failures.length > 50) {
       data.failures.splice(0, data.failures.length - 50);
     }
-    
+
     // Recalculate MTBF
     if (data.failures.length >= 2) {
       const sortedFailures = [...data.failures].sort(
         (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
       );
-      
+
       let totalTime = 0;
       for (let i = 1; i < sortedFailures.length; i++) {
-        const diff = new Date(sortedFailures[i].timestamp) - new Date(sortedFailures[i - 1].timestamp);
+        const diff =
+          new Date(sortedFailures[i].timestamp) -
+          new Date(sortedFailures[i - 1].timestamp);
         totalTime += diff;
       }
-      
+
       // MTBF in hours
-      data.mtbf = Math.round((totalTime / (sortedFailures.length - 1) / (1000 * 60 * 60)) * 10) / 10;
+      data.mtbf =
+        Math.round(
+          (totalTime / (sortedFailures.length - 1) / (1000 * 60 * 60)) * 10
+        ) / 10;
     }
-    
+
     data.lastCalculated = new Date().toISOString();
     localStorage.setItem(MTBF_STORAGE_KEY, JSON.stringify(data));
-    
+
     console.log(`💾 [MTBF] Recorded failure. MTBF: ${data.mtbf} hours`);
     return data;
   } catch (error) {
@@ -523,19 +571,19 @@ export const recordDowntimeEvent = (
 ) => {
   try {
     const history = getDowntimeHistory();
-    
+
     history.push({
       deviceId,
       cause,
       duration: durationMinutes,
       timestamp,
     });
-    
+
     // Keep only last 200 events
     if (history.length > 200) {
       history.splice(0, history.length - 200);
     }
-    
+
     localStorage.setItem(DOWNTIME_STORAGE_KEY, JSON.stringify(history));
     console.log(`💾 [Downtime] Recorded: ${cause} (${durationMinutes} mins)`);
     return history;
@@ -551,7 +599,7 @@ export const recordDowntimeEvent = (
  */
 export const getDowntimeParetoData = () => {
   const history = getDowntimeHistory();
-  
+
   if (history.length === 0) {
     // Return default categories with 0 occurrences
     return [
@@ -563,10 +611,10 @@ export const getDowntimeParetoData = () => {
       { cause: "Operator Error", occurrences: 0 },
     ];
   }
-  
+
   // Aggregate by cause
   const causeCounts = new Map();
-  
+
   history.forEach((event) => {
     const cause = event.cause || "Unknown";
     if (!causeCounts.has(cause)) {
@@ -576,7 +624,7 @@ export const getDowntimeParetoData = () => {
     entry.occurrences += 1;
     entry.totalDuration += event.duration || 0;
   });
-  
+
   // Sort by occurrences (Pareto - highest first)
   return Array.from(causeCounts.values())
     .sort((a, b) => b.occurrences - a.occurrences)
@@ -589,12 +637,12 @@ export const getDowntimeParetoData = () => {
  */
 export const analyzeAlertForDowntime = (alert, deviceId) => {
   if (!alert) return;
-  
+
   const message = (alert.msg || alert.message || "").toLowerCase();
   const severity = alert.severity || "info";
-  
+
   let cause = null;
-  
+
   // Map alert patterns to downtime causes
   if (message.includes("vibration") && severity === "critical") {
     cause = "Equipment Failure";
@@ -613,13 +661,13 @@ export const analyzeAlertForDowntime = (alert, deviceId) => {
   } else if (severity === "critical") {
     cause = "Critical Alert";
   }
-  
+
   if (cause) {
     recordDowntimeEvent(deviceId, cause, 5); // Default 5 min duration
     recordFailure(deviceId, cause);
     return cause;
   }
-  
+
   return null;
 };
 
@@ -630,30 +678,39 @@ export const analyzeAlertForDowntime = (alert, deviceId) => {
 /**
  * Fetch machine performance metrics (vibration, pressure, noise)
  */
-export const getMachinePerformanceData = async (deviceId, startTime, endTime) => {
+export const getMachinePerformanceData = async (
+  deviceId,
+  startTime,
+  endTime
+) => {
   try {
     const topics = ["vibration", "pressure", "noise"];
-    
+
     console.log(`📊 [Machine] Fetching performance data for ${deviceId}`);
-    
+
     // Fetch all topics in parallel
     const results = await Promise.allSettled(
-      topics.map((topic) => getStreamDataByTopic(deviceId, topic, startTime, endTime, 0, 200))
+      topics.map((topic) =>
+        getStreamDataByTopic(deviceId, topic, startTime, endTime, 0, 200)
+      )
     );
-    
+
     // Organize by timestamp
     const dataByTime = new Map();
-    
+
     results.forEach((result, index) => {
       const topic = topics[index];
-      
+
       if (result.status === "fulfilled" && Array.isArray(result.value)) {
         result.value.forEach((record) => {
           const timestamp = record.timestamp || record.time;
-          const time = timestamp 
-            ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : '';
-          
+          const time = timestamp
+            ? new Date(timestamp).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "";
+
           if (!dataByTime.has(timestamp)) {
             dataByTime.set(timestamp, {
               time,
@@ -663,11 +720,14 @@ export const getMachinePerformanceData = async (deviceId, startTime, endTime) =>
               noise: null,
             });
           }
-          
+
           let value = null;
           if (record.payload) {
             try {
-              const parsed = typeof record.payload === "string" ? JSON.parse(record.payload) : record.payload;
+              const parsed =
+                typeof record.payload === "string"
+                  ? JSON.parse(record.payload)
+                  : record.payload;
               value = Number(parsed[topic] || parsed.value || parsed) || null;
             } catch {
               value = Number(record.payload) || null;
@@ -675,17 +735,17 @@ export const getMachinePerformanceData = async (deviceId, startTime, endTime) =>
           } else if (record.value !== undefined) {
             value = Number(record.value) || null;
           }
-          
+
           dataByTime.get(timestamp)[topic] = value;
         });
       }
     });
-    
+
     // Convert to sorted array
     const result = Array.from(dataByTime.values())
       .filter((d) => d.timestamp)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    
+
     console.log(`✅ [Machine] Processed ${result.length} performance records`);
     return result;
   } catch (error) {
@@ -704,27 +764,32 @@ export const getMachinePerformanceData = async (deviceId, startTime, endTime) =>
 export const getEnvironmentalData = async (deviceId, startTime, endTime) => {
   try {
     const topics = ["temperature", "humidity", "co2", "aqi"];
-    
+
     console.log(`🌡️ [Environment] Fetching data for ${deviceId}`);
-    
+
     // Fetch all topics in parallel
     const results = await Promise.allSettled(
-      topics.map((topic) => getStreamDataByTopic(deviceId, topic, startTime, endTime, 0, 200))
+      topics.map((topic) =>
+        getStreamDataByTopic(deviceId, topic, startTime, endTime, 0, 200)
+      )
     );
-    
+
     // Organize by timestamp
     const dataByTime = new Map();
-    
+
     results.forEach((result, index) => {
       const topic = topics[index];
-      
+
       if (result.status === "fulfilled" && Array.isArray(result.value)) {
         result.value.forEach((record) => {
           const timestamp = record.timestamp || record.time;
-          const time = timestamp 
-            ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : '';
-          
+          const time = timestamp
+            ? new Date(timestamp).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "";
+
           if (!dataByTime.has(timestamp)) {
             dataByTime.set(timestamp, {
               time,
@@ -735,11 +800,14 @@ export const getEnvironmentalData = async (deviceId, startTime, endTime) => {
               aqi: null,
             });
           }
-          
+
           let value = null;
           if (record.payload) {
             try {
-              const parsed = typeof record.payload === "string" ? JSON.parse(record.payload) : record.payload;
+              const parsed =
+                typeof record.payload === "string"
+                  ? JSON.parse(record.payload)
+                  : record.payload;
               value = Number(parsed[topic] || parsed.value || parsed) || null;
             } catch {
               value = Number(record.payload) || null;
@@ -747,18 +815,20 @@ export const getEnvironmentalData = async (deviceId, startTime, endTime) => {
           } else if (record.value !== undefined) {
             value = Number(record.value) || null;
           }
-          
+
           dataByTime.get(timestamp)[topic] = value;
         });
       }
     });
-    
+
     // Convert to sorted array
     const result = Array.from(dataByTime.values())
       .filter((d) => d.timestamp)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    
-    console.log(`✅ [Environment] Processed ${result.length} environmental records`);
+
+    console.log(
+      `✅ [Environment] Processed ${result.length} environmental records`
+    );
     return result;
   } catch (error) {
     console.error(`❌ [Environment] Error:`, error.message);
@@ -777,10 +847,10 @@ export const getEnvironmentalData = async (deviceId, startTime, endTime) => {
 export const formatAlertsAsEventLog = (alerts = []) => {
   return alerts.map((alert) => ({
     timestamp: alert.time || alert.timestamp || new Date().toISOString(),
-    severity: alert.severity || 'info',
-    device: alert.deviceId || '',
-    event: alert.msg || alert.message || '',
-    code: alert.sensorType || alert.code || '',
+    severity: alert.severity || "info",
+    device: alert.deviceId || "",
+    event: alert.msg || alert.message || "",
+    code: alert.sensorType || alert.code || "",
   }));
 };
 
@@ -792,12 +862,14 @@ export const formatAlertsAsEventLog = (alerts = []) => {
  * Fetch all historical data for charts
  * Returns structured data for all 6 indicators
  */
-export const fetchAllHistoricalData = async (deviceId, timeRange = '24h') => {
+export const fetchAllHistoricalData = async (deviceId, timeRange = "24h") => {
   const { startTime, endTime } = getTimeRange(timeRange);
-  
+
   console.log(`📊 [Historical] Fetching all data for ${deviceId}`);
-  console.log(`⏰ [Historical] Range: ${timeRange} (${startTime} to ${endTime})`);
-  
+  console.log(
+    `⏰ [Historical] Range: ${timeRange} (${startTime} to ${endTime})`
+  );
+
   try {
     // Fetch HTTP data in parallel
     const [productionData, machineData, envData] = await Promise.all([
@@ -805,12 +877,12 @@ export const fetchAllHistoricalData = async (deviceId, timeRange = '24h') => {
       getMachinePerformanceData(deviceId, startTime, endTime),
       getEnvironmentalData(deviceId, startTime, endTime),
     ]);
-    
+
     // Get localStorage data
     const oeeData = getOEEChartData();
     const downtimeData = getDowntimeParetoData();
     const mtbf = getMTBFHours();
-    
+
     return {
       productionData,
       machinePerformanceData: machineData,
@@ -831,42 +903,42 @@ export default {
   // Time utilities
   formatISODate,
   getTimeRange,
-  
+
   // HTTP API functions
   getStreamDataByTopic,
   getStreamDataForDevice,
   getStreamDataForUser,
   deleteStreamDataById,
   deleteStateTopic,
-  
+
   // Production data
   getProductionVolumeData,
-  
+
   // OEE functions
   calculateOEE,
   getOEEHistory,
   saveOEEDataPoint,
   calculateAndStoreOEE,
   getOEEChartData,
-  
+
   // MTBF functions
   getMTBFData,
   recordFailure,
   getMTBFHours,
-  
+
   // Downtime functions
   getDowntimeHistory,
   recordDowntimeEvent,
   getDowntimeParetoData,
   analyzeAlertForDowntime,
-  
+
   // Machine & Environment data
   getMachinePerformanceData,
   getEnvironmentalData,
-  
+
   // Event log
   formatAlertsAsEventLog,
-  
+
   // Combined fetch
   fetchAllHistoricalData,
 };
