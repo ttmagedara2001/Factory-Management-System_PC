@@ -3,6 +3,9 @@ import { Client } from "@stomp/stompjs";
 // WebSocket URL from environment variables
 const WS_BASE_URL = import.meta.env.VITE_WS_URL;
 
+// ✅ Fallback JWT token - used only when primary authentication fails
+const FALLBACK_JWT_TOKEN = import.meta.env.VITE_FALLBACK_JWT_TOKEN || null;
+
 // Get JWT token from localStorage (set by login process)
 const getJwtToken = () => {
   const token = localStorage.getItem("jwtToken");
@@ -37,6 +40,30 @@ const buildWebSocketUrl = (jwtToken) => {
 let client = null;
 
 /**
+ * ✅ Auto-generate timestamp if not provided in the message
+ * @param {Object} data - The incoming message data
+ * @returns {string} - ISO timestamp string
+ */
+const generateTimestamp = (data) => {
+  if (data && data.timestamp) {
+    return data.timestamp;
+  }
+  return new Date().toISOString();
+};
+
+/**
+ * ✅ Normalize incoming message data with automatic timestamp
+ * @param {Object} data - The raw message data
+ * @returns {Object} - Normalized data with timestamp guaranteed
+ */
+const normalizeMessageData = (data) => {
+  return {
+    ...data,
+    timestamp: generateTimestamp(data),
+  };
+};
+
+/**
  * WebSocket Client Wrapper Class for Dashboard Integration
  * Provides methods to work with the existing STOMP client
  */
@@ -50,22 +77,49 @@ class WebSocketClient {
     this.disconnectCallback = null;
     this.isReady = false;
     this.jwtToken = null;
+    this.isAuthenticated = false; // Track if connection was successfully authenticated
+    this.connectionAttempts = 0; // Track connection attempts
+    this.usingFallbackToken = false; // Track if using fallback token
   }
 
   /**
    * Initialize STOMP client with JWT token
    * @param {string} token - JWT token
+   * @param {boolean} isFallback - Whether this is a fallback token attempt
    */
-  _initializeClient(token) {
-    if (this.client) {
-      console.log("[WebSocketClient] Client already initialized");
+  _initializeClient(token, isFallback = false) {
+    // If already authenticated, ignore subsequent initialization attempts
+    if (this.isAuthenticated && this.client?.connected) {
+      console.log(
+        "[WebSocketClient] ✅ Already authenticated, ignoring new token"
+      );
       return;
+    }
+
+    // Deactivate existing client if switching tokens
+    if (this.client) {
+      console.log(
+        "[WebSocketClient] 🔄 Deactivating existing client for new token..."
+      );
+      this.client.deactivate();
+      this.client = null;
     }
 
     const wsUrl = buildWebSocketUrl(token);
     if (!wsUrl) {
       throw new Error("Failed to build WebSocket URL - invalid token");
     }
+
+    this.usingFallbackToken = isFallback;
+    this.connectionAttempts++;
+
+    console.log(
+      `[WebSocketClient] 🔌 Connecting (attempt ${this.connectionAttempts})${
+        isFallback ? " with FALLBACK token" : ""
+      }...`
+    );
+
+    const self = this;
 
     this.client = new Client({
       brokerURL: wsUrl,
@@ -78,16 +132,22 @@ class WebSocketClient {
           "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         );
         console.log("✅ STOMP WebSocket Connected Successfully!");
+        if (self.usingFallbackToken) {
+          console.log("📋 Connected using FALLBACK JWT token");
+        }
         console.log(
           "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         );
         console.log("📋 Connection Frame:", frame);
-        this.isReady = true;
+
+        // Mark as authenticated - subsequent tokens will be ignored
+        self.isAuthenticated = true;
+        self.isReady = true;
 
         // If we have a device already set, subscribe to its topics
-        if (this.currentDeviceId) {
-          console.log(`📡 Auto-subscribing to device: ${this.currentDeviceId}`);
-          this._subscribeToDeviceTopics(this.currentDeviceId);
+        if (self.currentDeviceId) {
+          console.log(`📡 Auto-subscribing to device: ${self.currentDeviceId}`);
+          self._subscribeToDeviceTopics(self.currentDeviceId);
         } else {
           console.log(
             "⚠️ No device selected yet. Will subscribe when device is selected."
@@ -95,8 +155,8 @@ class WebSocketClient {
         }
 
         // Call user's connect callback
-        if (this.connectCallback) {
-          this.connectCallback();
+        if (self.connectCallback) {
+          self.connectCallback();
         }
       },
 
@@ -126,17 +186,28 @@ class WebSocketClient {
         console.error(
           "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         );
+
+        // Try fallback token on STOMP error (authentication failure)
+        self._tryFallbackConnection("STOMP error");
       },
 
       onWebSocketError: (event) => {
         console.error("🚫 WebSocket error", event);
+        // Try fallback token on WebSocket error
+        self._tryFallbackConnection("WebSocket error");
       },
 
       onWebSocketClose: (event) => {
         console.warn("🔻 WebSocket closed", event);
-        this.isReady = false;
-        if (this.disconnectCallback) {
-          this.disconnectCallback();
+        self.isReady = false;
+
+        // Only try fallback if not yet authenticated (connection failed before auth)
+        if (!self.isAuthenticated) {
+          self._tryFallbackConnection("WebSocket closed before authentication");
+        }
+
+        if (self.disconnectCallback) {
+          self.disconnectCallback();
         }
       },
 
@@ -149,6 +220,45 @@ class WebSocketClient {
   }
 
   /**
+   * Try to connect with fallback JWT token if primary connection fails
+   * @param {string} reason - Reason for fallback attempt
+   */
+  _tryFallbackConnection(reason) {
+    // Don't try fallback if already authenticated
+    if (this.isAuthenticated) {
+      console.log(
+        "[WebSocketClient] ✅ Already authenticated, no fallback needed"
+      );
+      return;
+    }
+
+    // Don't try fallback if already using fallback token
+    if (this.usingFallbackToken) {
+      console.error(
+        "[WebSocketClient] ❌ Fallback token also failed. Cannot connect."
+      );
+      return;
+    }
+
+    // Check if fallback token is available
+    if (!FALLBACK_JWT_TOKEN) {
+      console.warn("[WebSocketClient] ⚠️ No fallback JWT token configured");
+      return;
+    }
+
+    console.log(
+      `[WebSocketClient] 🔄 Primary connection failed (${reason}). Trying fallback token...`
+    );
+
+    // Small delay before trying fallback
+    setTimeout(() => {
+      if (!this.isAuthenticated) {
+        this._initializeClient(FALLBACK_JWT_TOKEN, true);
+      }
+    }, 1000);
+  }
+
+  /**
    * Subscribe to device topics dynamically
    * @param {string} deviceId - Device ID to subscribe to
    */
@@ -156,16 +266,19 @@ class WebSocketClient {
     const self = this;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STOMP Topic Subscriptions - Backend bridges MQTT to these topics
+    // STOMP Topic Subscriptions - EXACT MQTT topic format for MQTTX
     // ═══════════════════════════════════════════════════════════════════════
 
-    // 1. Subscribe to /topic/stream/{deviceId} - receives all sensor data
-    const streamTopic = `/topic/stream/${deviceId}`;
+    // 1. Subscribe to protonest/{deviceId}/stream/fmc - receives all sensor data
+    // ✅ EXACT MQTT topic format - matches MQTTX subscription
+    const streamTopic = `protonest/${deviceId}/stream/fmc`;
     if (!this.subscriptions.has(`topic-stream-${deviceId}`)) {
       const streamSub = this.client.subscribe(streamTopic, (message) => {
         try {
-          const data = JSON.parse(message.body);
-          console.log(`📡 [/topic/stream/${deviceId}] Received:`, data);
+          const rawData = JSON.parse(message.body);
+          // ✅ Auto-add timestamp if not provided
+          const data = normalizeMessageData(rawData);
+          console.log(`📡 [protonest/${deviceId}/stream/fmc] Received:`, data);
 
           if (self.dataCallback && typeof data === "object") {
             // Handle individual sensor message: {"vibration": "8.5"}
@@ -179,7 +292,7 @@ class WebSocketClient {
                 self.dataCallback({
                   sensorType: key,
                   value: value,
-                  timestamp: data.timestamp || new Date().toISOString(),
+                  timestamp: data.timestamp,
                 });
               }
             });
@@ -189,16 +302,19 @@ class WebSocketClient {
         }
       });
       this.subscriptions.set(`topic-stream-${deviceId}`, streamSub);
-      console.log(`🔔 Subscribed to ${streamTopic}`);
+      console.log(`🔔 Subscribed to protonest/${deviceId}/stream/fmc`);
     }
 
-    // 2. Subscribe to /topic/state/{deviceId} - receives state/control data
-    const stateTopic = `/topic/state/${deviceId}`;
+    // 2. Subscribe to protonest/{deviceId}/state - receives state/control data
+    // ✅ EXACT MQTT topic format - matches MQTTX subscription
+    const stateTopic = `protonest/${deviceId}/state`;
     if (!this.subscriptions.has(`topic-state-${deviceId}`)) {
       const stateSub = this.client.subscribe(stateTopic, (message) => {
         try {
-          const data = JSON.parse(message.body);
-          console.log(`📡 [/topic/state/${deviceId}] Received:`, data);
+          const rawData = JSON.parse(message.body);
+          // ✅ Auto-add timestamp if not provided
+          const data = normalizeMessageData(rawData);
+          console.log(`📡 [protonest/${deviceId}/state] Received:`, data);
 
           if (self.dataCallback && typeof data === "object") {
             Object.keys(data).forEach((key) => {
@@ -206,7 +322,7 @@ class WebSocketClient {
                 self.dataCallback({
                   sensorType: key,
                   value: data[key],
-                  timestamp: data.timestamp || new Date().toISOString(),
+                  timestamp: data.timestamp,
                 });
               }
             });
@@ -216,12 +332,13 @@ class WebSocketClient {
         }
       });
       this.subscriptions.set(`topic-state-${deviceId}`, stateSub);
-      console.log(`🔔 Subscribed to ${stateTopic}`);
+      console.log(`🔔 Subscribed to protonest/${deviceId}/state`);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Per-sensor STOMP topic subscriptions (if backend publishes per-sensor)
-    // Format: /topic/protonest/{deviceId}/stream/fmc/{sensor}
+    // Per-sensor STOMP topic subscriptions - EXACT MQTT topic format
+    // Format: protonest/{deviceId}/stream/fmc/{sensor}
+    // This matches the exact topic address that MQTTX publishes to
     // ═══════════════════════════════════════════════════════════════════════
     const streamSensors = [
       "vibration",
@@ -234,14 +351,16 @@ class WebSocketClient {
     ];
 
     streamSensors.forEach((sensor) => {
-      // Try STOMP-compatible topic format
-      const sensorTopic = `/topic/protonest/${deviceId}/stream/fmc/${sensor}`;
+      // ✅ EXACT MQTT topic format - matches MQTTX subscription
+      const sensorTopic = `protonest/${deviceId}/stream/fmc/${sensor}`;
       const subKey = `topic-sensor-${deviceId}-${sensor}`;
 
       if (!this.subscriptions.has(subKey)) {
         const sensorSub = this.client.subscribe(sensorTopic, (message) => {
           try {
-            const data = JSON.parse(message.body);
+            const rawData = JSON.parse(message.body);
+            // ✅ Auto-add timestamp if not provided
+            const data = normalizeMessageData(rawData);
             console.log(`📡 [${sensorTopic}] Received:`, data);
 
             if (self.dataCallback) {
@@ -257,7 +376,7 @@ class WebSocketClient {
                 self.dataCallback({
                   sensorType: sensor,
                   value: value,
-                  timestamp: data.timestamp || new Date().toISOString(),
+                  timestamp: data.timestamp,
                 });
               }
             }
@@ -266,20 +385,25 @@ class WebSocketClient {
           }
         });
         this.subscriptions.set(subKey, sensorSub);
-        console.log(`🔔 Subscribed to ${sensorTopic}`);
+        console.log(
+          `🔔 Subscribed to protonest/${deviceId}/stream/fmc/${sensor}`
+        );
       }
     });
 
     // Subscribe to ventilation and machineControl state topics
+    // ✅ EXACT MQTT topic format - matches MQTTX subscription
     const stateTypes = ["ventilation", "machineControl"];
     stateTypes.forEach((stateType) => {
-      const stateTypeTopic = `/topic/protonest/${deviceId}/state/fmc/${stateType}`;
+      const stateTypeTopic = `protonest/${deviceId}/state/fmc/${stateType}`;
       const subKey = `topic-state-${deviceId}-${stateType}`;
 
       if (!this.subscriptions.has(subKey)) {
         const sub = this.client.subscribe(stateTypeTopic, (message) => {
           try {
-            const data = JSON.parse(message.body);
+            const rawData = JSON.parse(message.body);
+            // ✅ Auto-add timestamp if not provided
+            const data = normalizeMessageData(rawData);
             console.log(`📡 [${stateTypeTopic}] Received:`, data);
 
             if (self.dataCallback) {
@@ -289,7 +413,7 @@ class WebSocketClient {
                 self.dataCallback({
                   sensorType: stateType,
                   value: value,
-                  timestamp: data.timestamp || new Date().toISOString(),
+                  timestamp: data.timestamp,
                 });
               }
             }
@@ -298,7 +422,9 @@ class WebSocketClient {
           }
         });
         this.subscriptions.set(subKey, sub);
-        console.log(`🔔 Subscribed to ${stateTypeTopic}`);
+        console.log(
+          `🔔 Subscribed to protonest/${deviceId}/state/fmc/${stateType}`
+        );
       }
     });
 
@@ -334,8 +460,9 @@ class WebSocketClient {
   /**
    * Connect to WebSocket (initializes client with token)
    * @param {string} token - JWT token
+   * @param {boolean} forceReconnect - Force a new connection even if already connected
    */
-  async connect(token) {
+  async connect(token, forceReconnect = false) {
     if (!token) {
       console.error(
         "[WebSocketClient] ❌ Cannot connect: No JWT token provided"
@@ -343,10 +470,25 @@ class WebSocketClient {
       throw new Error("JWT token required for WebSocket connection");
     }
 
+    // If already authenticated with current connection, ignore unless forced
+    if (this.isAuthenticated && this.isConnected && !forceReconnect) {
+      console.log(
+        "[WebSocketClient] ✅ Already authenticated and connected, ignoring new token"
+      );
+      return Promise.resolve();
+    }
+
     this.jwtToken = token;
 
-    // Initialize client if not already done
-    if (!this.client) {
+    // Reset authentication state for new connection attempt
+    if (forceReconnect) {
+      this.isAuthenticated = false;
+      this.connectionAttempts = 0;
+      this.usingFallbackToken = false;
+    }
+
+    // Initialize client if not already done or force reconnect
+    if (!this.client || forceReconnect) {
       console.log("[WebSocketClient] 🔄 Initializing STOMP client...");
       this._initializeClient(token);
     } else if (!this.isConnected) {
@@ -405,6 +547,17 @@ class WebSocketClient {
    */
   getConnectionStatus() {
     return this.isConnected;
+  }
+
+  /**
+   * Get authentication status
+   */
+  getAuthenticationStatus() {
+    return {
+      isAuthenticated: this.isAuthenticated,
+      usingFallbackToken: this.usingFallbackToken,
+      connectionAttempts: this.connectionAttempts,
+    };
   }
 
   /**
@@ -589,6 +742,9 @@ class WebSocketClient {
     window.wsInfo = () => {
       console.log("📊 WebSocket Info:");
       console.log("   Connected:", this.isConnected);
+      console.log("   Authenticated:", this.isAuthenticated);
+      console.log("   Using Fallback Token:", this.usingFallbackToken);
+      console.log("   Connection Attempts:", this.connectionAttempts);
       console.log("   Current Device:", this.currentDeviceId || "None");
       console.log(
         "   Active Subscriptions:",

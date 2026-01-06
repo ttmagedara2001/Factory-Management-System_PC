@@ -1,9 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, User, ChevronDown, Menu, Wifi, WifiOff } from 'lucide-react';
+import { Bell, User, ChevronDown, Menu, Wifi, WifiOff, Radio, Activity } from 'lucide-react';
 import { useAuth } from '../Context/AuthContext.jsx';
 
-const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotifications, devices, selectedDevice, onDeviceChange, alertsCount = 0, isWebSocketConnected = false }) => {
+const Header = ({ 
+  toggleSidebar, 
+  setBellClicked, 
+  setShowNotifications, 
+  showNotifications, 
+  devices, 
+  selectedDevice, 
+  onDeviceChange, 
+  alertsCount = 0, 
+  isWebSocketConnected = false,
+  isConnecting = false,
+  factoryStatus = 'RUNNING'
+}) => {
   const { auth } = useAuth();
+
+  // Factory status configuration
+  const statusConfig = {
+    RUNNING: { bg: 'bg-green-500', text: 'text-white', dot: 'bg-green-300', label: 'RUNNING' },
+    CRITICAL: { bg: 'bg-red-500', text: 'text-white', dot: 'bg-red-300', label: 'CRITICAL' },
+    WARNING: { bg: 'bg-yellow-500', text: 'text-white', dot: 'bg-yellow-300', label: 'IDLE' },
+    STOPPED: { bg: 'bg-slate-500', text: 'text-white', dot: 'bg-slate-300', label: 'STOPPED' }
+  };
+  const status = statusConfig[factoryStatus] || statusConfig.RUNNING;
 
   // Extract username from email (before @) or use full userId
   const username = auth?.userId
@@ -43,15 +64,68 @@ const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotif
 
   return (
     <header className="h-14 sm:h-16 bg-[#DCEBF5] flex items-center justify-between px-3 sm:px-8 border-b border-slate-200 gap-2 sm:gap-6">
-      {/* Hamburger Menu */}
-      <button
-        onClick={toggleSidebar}
-        className="p-2 hover:bg-slate-200 rounded-lg transition-colors flex-shrink-0"
-      >
-        <Menu size={20} className="sm:w-6 sm:h-6 text-slate-700" />
-      </button>
+      {/* Left Section - Hamburger + Factory Status */}
+      <div className="flex items-center gap-2 sm:gap-4">
+        {/* Hamburger Menu */}
+        <button
+          onClick={toggleSidebar}
+          className="p-2 hover:bg-slate-200 rounded-lg transition-colors flex-shrink-0"
+        >
+          <Menu size={20} className="sm:w-6 sm:h-6 text-slate-700" />
+        </button>
 
-      <div className="flex items-center gap-2 sm:gap-6">
+        {/* Factory Status Badge */}
+        <div className={`${status.bg} ${status.text} px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold shadow-sm flex items-center gap-1.5`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${status.dot} animate-pulse`}></span>
+          <span className="hidden xs:inline">Factory:</span>
+          <span>{status.label}</span>
+        </div>
+      </div>
+
+      {/* Right Section */}
+      <div className="flex items-center gap-2 sm:gap-4">
+        {/* Connection Status Icons (iPhone-style) */}
+        <div className="flex items-center gap-1 bg-slate-100/80 px-2 py-1 rounded-full">
+          {/* WebSocket Status */}
+          <div 
+            className="flex items-center gap-0.5" 
+            title={isWebSocketConnected ? 'WebSocket Connected' : isConnecting ? 'Connecting...' : 'WebSocket Disconnected'}
+          >
+            <Wifi 
+              size={14} 
+              className={`${
+                isWebSocketConnected 
+                  ? 'text-green-500' 
+                  : isConnecting 
+                    ? 'text-amber-500 animate-pulse' 
+                    : 'text-slate-400'
+              }`} 
+            />
+          </div>
+          
+          {/* Separator */}
+          <div className="w-px h-3 bg-slate-300 mx-0.5"></div>
+          
+          {/* MQTT Status */}
+          <div 
+            className="flex items-center gap-0.5" 
+            title={isWebSocketConnected ? 'MQTT Connected' : isConnecting ? 'Connecting...' : 'MQTT Disconnected'}
+          >
+            <Radio 
+              size={14} 
+              className={`${
+                isWebSocketConnected 
+                  ? 'text-green-500' 
+                  : isConnecting 
+                    ? 'text-amber-500 animate-pulse' 
+                    : 'text-slate-400'
+              }`} 
+            />
+          </div>
+        </div>
+
+        <div className="h-6 w-px bg-slate-300 hidden sm:block"></div>
+
         {/* Device Select */}
         <div className="relative" ref={dropdownRef}>
           <button
@@ -89,41 +163,26 @@ const Header = ({ toggleSidebar, setBellClicked, setShowNotifications, showNotif
           )}
         </div>
 
-        <div className="h-6 sm:h-8 w-px bg-slate-400 mx-1 sm:mx-2 hidden sm:block"></div>
-
-        {/* WebSocket Connection Status */}
-        <div className="flex items-center gap-1.5" title={isWebSocketConnected ? 'Real-time connected' : 'Disconnected'}>
-          {isWebSocketConnected ? (
-            <Wifi size={18} className="text-green-500" />
-          ) : (
-            <WifiOff size={18} className="text-red-400" />
-          )}
-          <span className={`text-xs font-medium hidden md:inline ${isWebSocketConnected ? 'text-green-600' : 'text-red-400'}`}>
-            {isWebSocketConnected ? 'Live' : 'Offline'}
-          </span>
-        </div>
-
-        <div className="h-6 sm:h-8 w-px bg-slate-400 mx-1 sm:mx-2 hidden sm:block"></div>
+        <div className="h-6 w-px bg-slate-300 hidden sm:block"></div>
 
         {/* User Profile - Hidden on very small screens */}
-        <div className="hidden sm:flex items-center gap-3">
-          <div className="w-8 h-8 bg-slate-300 rounded-full flex items-center justify-center text-slate-600">
-            <User size={20} />
+        <div className="hidden sm:flex items-center gap-2">
+          <div className="w-7 h-7 bg-slate-300 rounded-full flex items-center justify-center text-slate-600">
+            <User size={16} />
           </div>
-          {/* Username from auto-login (auth.userId) */}
-          <span className="text-slate-700 font-semibold text-sm hidden md:inline">{username}</span>
+          <span className="text-slate-700 font-semibold text-xs hidden md:inline">{username}</span>
         </div>
 
         {/* Notifications */}
         <button
           onClick={handleBellClick}
-          className={`relative p-2 rounded-lg transition-all duration-300 group ${showNotifications ? 'bg-yellow-100' : 'hover:bg-slate-200'
+          className={`relative p-1.5 rounded-lg transition-all duration-300 group ${showNotifications ? 'bg-yellow-100' : 'hover:bg-slate-200'
             }`}
         >
-          <Bell size={24} className={`transition-colors duration-300 ${showNotifications ? 'text-yellow-600' : 'text-slate-700 group-hover:text-yellow-500'
+          <Bell size={20} className={`transition-colors duration-300 ${showNotifications ? 'text-yellow-600' : 'text-slate-700 group-hover:text-yellow-500'
             }`} />
           {alertsCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-[#FCD34D] text-slate-900 text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#DCEBF5]">
+            <span className="absolute -top-0.5 -right-0.5 bg-[#FCD34D] text-slate-900 text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-[#DCEBF5]">
               {alertsCount}
             </span>
           )}

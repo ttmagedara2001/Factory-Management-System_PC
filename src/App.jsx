@@ -1,11 +1,4 @@
-import React, { useState, useEffect } from 'react';
-// Device list for selection (move from Dashboard.jsx)
-const MOCK_DEVICES = [
-  { id: 'device9988', name: 'Machine A - Line 1' },
-  { id: 'device0011233', name: 'Machine B - Line 2' },
-  { id: 'device7654', name: 'Machine C - Line 3' },
-  { id: 'device3421', name: 'Machine D - Line 4' },
-];
+import React, { useState, useEffect, useCallback } from 'react';
 import SidePanel from './Components/SidePanel';
 import Header from './Components/Header';
 import Dashboard from './Components/Dashboard';
@@ -23,8 +16,25 @@ export default function App() {
   const [bellClicked, setBellClicked] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [selectedDevice, setSelectedDevice] = useState(() => localStorage.getItem('selectedDevice') || MOCK_DEVICES[0].id);
+  const [selectedDevice, setSelectedDevice] = useState(() => localStorage.getItem('selectedDevice') || 'device9988');
   const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
+  
+  // Factory status and control states
+  const [factoryStatus, setFactoryStatus] = useState('RUNNING'); // RUNNING, STOPPED, CRITICAL, WARNING
+  const [controlMode, setControlMode] = useState('manual'); // 'auto' or 'manual' - default is manual
+  const [isEmergencyStopped, setIsEmergencyStopped] = useState(false);
+  const [targetUnits, setTargetUnits] = useState(() => {
+    const saved = localStorage.getItem('targetUnits');
+    return saved ? parseInt(saved, 10) : 1024;
+  });
+  
+  // Device list - will be populated from API or use defaults
+  const [devices, setDevices] = useState([
+    { id: 'device9988', name: 'Machine A - Line 1' },
+    { id: 'device0011233', name: 'Machine B - Line 2' },
+    { id: 'device7654', name: 'Machine C - Line 3' },
+    { id: 'device3421', name: 'Machine D - Line 4' },
+  ]);
 
   // Real-time sensor data from MQTT
   const [sensorData, setSensorData] = useState({
@@ -42,9 +52,9 @@ export default function App() {
 
   // Threshold state management
   const [thresholds, setThresholds] = useState({
-    vibration: { warning: 7, critical: 9 },
-    pressure: { min: 5, max: 80, warning: 50 },
-    noise: { warning: 70, critical: 90 },
+    vibration: { min: 0, critical: 9 },
+    pressure: { min: 5, max: 80 },
+    noise: { min: 0, critical: 90 },
     temperature: { min: 10, max: 35 },
     humidity: { min: 10, max: 80 },
     co2: { min: 0, max: 70 }
@@ -56,6 +66,119 @@ export default function App() {
   // In-memory per-device sensor history (newest-first arrays)
   const [sensorHistory, setSensorHistory] = useState({});
 
+  // OEE and Efficiency calculation states
+  const [dailyProduction, setDailyProduction] = useState({ produced: 0, startTime: null });
+  const [oeeData, setOeeData] = useState({ availability: 100, performance: 100, quality: 100, oee: 100 });
+  const [overallEfficiency, setOverallEfficiency] = useState(0);
+  const [efficiencyTrend, setEfficiencyTrend] = useState(0);
+
+  // Save target units to localStorage
+  useEffect(() => {
+    localStorage.setItem('targetUnits', targetUnits.toString());
+  }, [targetUnits]);
+
+  // Calculate Overall Efficiency based on production vs target
+  useEffect(() => {
+    if (sensorData.units !== null && targetUnits > 0) {
+      const currentProduced = sensorData.units;
+      const efficiency = Math.min((currentProduced / targetUnits) * 100, 100);
+      setOverallEfficiency(efficiency);
+      
+      // Calculate trend (simple comparison to expected at this time of day)
+      const now = new Date();
+      const hoursElapsed = now.getHours() + now.getMinutes() / 60;
+      const expectedProduction = (hoursElapsed / 24) * targetUnits;
+      const trend = expectedProduction > 0 ? ((currentProduced - expectedProduction) / expectedProduction) * 100 : 0;
+      setEfficiencyTrend(trend);
+    }
+  }, [sensorData.units, targetUnits]);
+
+  // Calculate OEE (Overall Equipment Efficiency) for 24hrs
+  // OEE = Availability × Performance × Quality
+  useEffect(() => {
+    const calculateOEE = () => {
+      const now = new Date();
+      const hoursInDay = 24;
+      
+      // Availability: (Run Time / Planned Production Time) × 100
+      // For now, use machine control status to track uptime
+      const plannedTime = hoursInDay * 60; // minutes
+      const downtime = isEmergencyStopped ? (now.getHours() * 60 + now.getMinutes()) * 0.1 : 0; // Estimate
+      const runTime = plannedTime - downtime;
+      const availability = Math.min((runTime / plannedTime) * 100, 100);
+      
+      // Performance: (Actual Output / Theoretical Output) × 100
+      const actualOutput = sensorData.units || 0;
+      const hoursElapsed = now.getHours() + now.getMinutes() / 60;
+      const theoreticalOutput = (hoursElapsed / hoursInDay) * targetUnits;
+      const performance = theoreticalOutput > 0 ? Math.min((actualOutput / theoreticalOutput) * 100, 100) : 100;
+      
+      // Quality: (Good Units / Total Units) × 100
+      // Assuming all produced units are good for now (can be updated with actual data)
+      const quality = 98; // Default to 98% quality rate
+      
+      // OEE Calculation
+      const oee = (availability * performance * quality) / 10000;
+      
+      setOeeData({
+        availability: Math.round(availability * 10) / 10,
+        performance: Math.round(performance * 10) / 10,
+        quality,
+        oee: Math.round(oee * 10) / 10
+      });
+    };
+    
+    calculateOEE();
+    // Recalculate OEE every minute
+    const interval = setInterval(calculateOEE, 60000);
+    return () => clearInterval(interval);
+  }, [sensorData.units, targetUnits, isEmergencyStopped]);
+
+  // Update factory status based on various conditions
+  useEffect(() => {
+    if (isEmergencyStopped) {
+      setFactoryStatus('STOPPED');
+    } else if (alerts.some(a => a.severity === 'critical')) {
+      setFactoryStatus('CRITICAL');
+    } else if (alerts.some(a => a.severity === 'warning')) {
+      setFactoryStatus('WARNING');
+    } else {
+      setFactoryStatus('RUNNING');
+    }
+  }, [alerts, isEmergencyStopped]);
+
+  // Emergency Stop Handler
+  const handleEmergencyStop = useCallback(async () => {
+    console.log('🚨 EMERGENCY STOP ACTIVATED');
+    setIsEmergencyStopped(true);
+    setFactoryStatus('STOPPED');
+    
+    // Send STOP command via WebSocket
+    try {
+      if (webSocketClient?.sendMachineControlCommand) {
+        webSocketClient.sendMachineControlCommand('EMERGENCY_STOP');
+      }
+      
+      // Also send via HTTP API as backup
+      const { updateStateDetails } = await import('./services/deviceService.js');
+      await updateStateDetails(selectedDevice, 'machineControl', {
+        machineControl: 'EMERGENCY_STOP',
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log('✅ Emergency stop command sent successfully');
+    } catch (error) {
+      console.error('❌ Failed to send emergency stop command:', error);
+    }
+  }, [selectedDevice]);
+
+  // Resume System Handler
+  const handleResumeSystem = useCallback(() => {
+    console.log('▶️ SYSTEM RESUME REQUESTED');
+    setIsEmergencyStopped(false);
+    // Refresh the entire application
+    window.location.reload();
+  }, []);
 
   // Alert notification logic for all critical sensors
   useEffect(() => {
@@ -315,6 +438,9 @@ export default function App() {
         togglePin={togglePin}
         onMouseEnter={() => !isSidebarPinned && setIsSidebarOpen(true)}
         onMouseLeave={() => !isSidebarPinned && setIsSidebarOpen(false)}
+        isEmergencyStopped={isEmergencyStopped}
+        onEmergencyStop={handleEmergencyStop}
+        onResumeSystem={handleResumeSystem}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -323,52 +449,60 @@ export default function App() {
           setBellClicked={setBellClicked}
           setShowNotifications={setShowNotifications}
           showNotifications={showNotifications}
-          devices={MOCK_DEVICES}
+          devices={devices}
           selectedDevice={selectedDevice}
           onDeviceChange={handleDeviceChange}
           alertsCount={alerts.length}
           alerts={alerts}
           isWebSocketConnected={isWebSocketConnected}
+          isConnecting={isConnecting}
+          factoryStatus={factoryStatus}
         />
 
-        {/* Connection Status Bar */}
-        <div className="w-full flex flex-wrap justify-center sm:justify-end items-center px-3 sm:px-8 py-2 bg-transparent gap-2">
-          <div className="flex flex-wrap justify-center gap-2 sm:gap-4 text-[10px] sm:text-xs font-semibold">
-            <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full ${isWebSocketConnected
-              ? 'bg-green-100 text-green-700'
-              : isConnecting
-                ? 'bg-amber-100 text-amber-700'
-                : 'bg-red-100 text-red-600'
-              }`}>
-              <span className={`w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full ${isWebSocketConnected
-                ? 'bg-green-500'
-                : isConnecting
-                  ? 'bg-amber-500 animate-pulse'
-                  : 'bg-red-500'
-                }`}></span>
-              <span className="hidden xs:inline">WebSocket:</span> {isWebSocketConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'WS Off'}
-            </span>
-            <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full ${isWebSocketConnected
-              ? 'bg-green-100 text-green-700'
-              : isConnecting
-                ? 'bg-amber-100 text-amber-700'
-                : 'bg-red-100 text-red-600'
-              }`}>
-              <span className={`w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full ${isWebSocketConnected
-                ? 'bg-green-500'
-                : isConnecting
-                  ? 'bg-amber-500 animate-pulse'
-                  : 'bg-red-500'
-                }`}></span>
-              <span className="hidden xs:inline">MQTT:</span> {isWebSocketConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'MQTT Off'}
-            </span>
-          </div>
-        </div>
-
         <main className="flex-1 overflow-y-auto relative">
-          {activeTab === 'dashboard' && <Dashboard bellClicked={bellClicked} thresholds={thresholds} sensorData={sensorData} webSocketClient={webSocketClient} selectedDevice={selectedDevice} devices={MOCK_DEVICES} alerts={alerts} setAlerts={setAlerts} />}
-          {activeTab === 'settings' && <SettingsWindow thresholds={thresholds} setThresholds={setThresholds} currentValues={sensorData} webSocketClient={webSocketClient} selectedDevice={selectedDevice} />}
-          {activeTab === 'historical' && <HistoricalWindow alerts={alerts} setAlerts={setAlerts} devices={MOCK_DEVICES} selectedDevice={selectedDevice} setSelectedDevice={handleDeviceChange} sensorHistory={sensorHistory} />}
+          {activeTab === 'dashboard' && (
+            <Dashboard 
+              bellClicked={bellClicked} 
+              thresholds={thresholds} 
+              sensorData={sensorData} 
+              webSocketClient={webSocketClient} 
+              selectedDevice={selectedDevice} 
+              devices={devices} 
+              alerts={alerts} 
+              setAlerts={setAlerts}
+              targetUnits={targetUnits}
+              setTargetUnits={setTargetUnits}
+              overallEfficiency={overallEfficiency}
+              efficiencyTrend={efficiencyTrend}
+              oeeData={oeeData}
+              factoryStatus={factoryStatus}
+              controlMode={controlMode}
+            />
+          )}
+          {activeTab === 'settings' && (
+            <SettingsWindow 
+              thresholds={thresholds} 
+              setThresholds={setThresholds} 
+              currentValues={sensorData} 
+              webSocketClient={webSocketClient} 
+              selectedDevice={selectedDevice}
+              controlMode={controlMode}
+              setControlMode={setControlMode}
+              factoryStatus={factoryStatus}
+              isEmergencyStopped={isEmergencyStopped}
+            />
+          )}
+          {activeTab === 'historical' && (
+            <HistoricalWindow 
+              alerts={alerts} 
+              setAlerts={setAlerts} 
+              devices={devices} 
+              selectedDevice={selectedDevice} 
+              setSelectedDevice={handleDeviceChange} 
+              sensorHistory={sensorHistory}
+              factoryStatus={factoryStatus}
+            />
+          )}
 
           {/* Notification Sidebar */}
           {showNotifications && (

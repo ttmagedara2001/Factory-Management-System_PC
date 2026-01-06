@@ -1,16 +1,54 @@
 import React, { useState } from 'react';
-import { TrendingUp } from 'lucide-react';
-import { LineChart, Line, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
+import { TrendingUp, TrendingDown, Target, Edit2, Check, X } from 'lucide-react';
 import RealTimeWindow from './RealTimeWindow';
-import FactoryStatus from './FactoryStatus';
 
 
-const productionData = [];
-const logData = [];
+const Dashboard = ({ 
+  bellClicked, 
+  thresholds, 
+  sensorData, 
+  webSocketClient, 
+  selectedDevice, 
+  onDeviceChange, 
+  devices, 
+  alerts, 
+  setAlerts,
+  targetUnits,
+  setTargetUnits,
+  overallEfficiency,
+  efficiencyTrend,
+  oeeData,
+  factoryStatus,
+  controlMode
+}) => {
+  const [isEditingTarget, setIsEditingTarget] = useState(false);
+  const [tempTargetUnits, setTempTargetUnits] = useState(targetUnits);
+  const [targetError, setTargetError] = useState('');
 
+  // Validate and save target units
+  const handleSaveTarget = () => {
+    const value = parseInt(tempTargetUnits, 10);
+    if (isNaN(value) || value <= 0) {
+      setTargetError('Please enter a valid positive number');
+      return;
+    }
+    if (value > 100000) {
+      setTargetError('Target cannot exceed 100,000 units');
+      return;
+    }
+    setTargetUnits(value);
+    setIsEditingTarget(false);
+    setTargetError('');
+  };
 
-const Dashboard = ({ bellClicked, thresholds, sensorData, webSocketClient, selectedDevice, onDeviceChange, devices, alerts, setAlerts }) => {
-  // No local device selection; use selectedDevice prop only
+  const handleCancelEdit = () => {
+    setTempTargetUnits(targetUnits);
+    setIsEditingTarget(false);
+    setTargetError('');
+  };
+
+  // Calculate OEE bar segments (out of 50)
+  const oeeSegments = Math.round((oeeData?.oee || 0) * 50 / 100);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto">
@@ -26,7 +64,6 @@ const Dashboard = ({ bellClicked, thresholds, sensorData, webSocketClient, selec
             <span className="text-[10px] sm:text-xs text-slate-500 ml-1 sm:ml-2 hidden md:inline">({selectedDevice})</span>
           </span>
         </div>
-        <FactoryStatus />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 lg:gap-8">
@@ -40,27 +77,90 @@ const Dashboard = ({ bellClicked, thresholds, sensorData, webSocketClient, selec
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
             {/* Daily Production */}
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-100">
-              <h3 className="text-[10px] font-bold text-slate-500 uppercase mb-2">Daily Production</h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[10px] font-bold text-slate-500 uppercase">Daily Production</h3>
+                {!isEditingTarget && (
+                  <button 
+                    onClick={() => setIsEditingTarget(true)}
+                    className="p-1 hover:bg-slate-100 rounded transition-colors"
+                    title="Edit target"
+                  >
+                    <Edit2 size={14} className="text-slate-400" />
+                  </button>
+                )}
+              </div>
               <div className="text-2xl sm:text-4xl font-extrabold text-slate-800 mb-2">{sensorData?.units ?? '--'}</div>
               <div className="flex items-center gap-2">
-                <div className="flex items-center text-green-500 text-xs font-bold bg-green-50 px-1 rounded">
-                  <TrendingUp size={12} className="mr-1" />
-                  +2.3%
+                <div className={`flex items-center text-xs font-bold px-1 rounded ${
+                  (sensorData?.units || 0) >= targetUnits 
+                    ? 'text-green-500 bg-green-50' 
+                    : 'text-yellow-500 bg-yellow-50'
+                }`}>
+                  {(sensorData?.units || 0) >= targetUnits ? (
+                    <TrendingUp size={12} className="mr-1" />
+                  ) : (
+                    <Target size={12} className="mr-1" />
+                  )}
+                  {sensorData?.units ? `${Math.round((sensorData.units / targetUnits) * 100)}%` : '--'}
                 </div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Target 1024 Units</span>
+                {isEditingTarget ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={tempTargetUnits}
+                      onChange={(e) => {
+                        setTempTargetUnits(e.target.value);
+                        setTargetError('');
+                      }}
+                      className={`w-20 px-2 py-0.5 text-[10px] border rounded focus:outline-none focus:ring-1 ${
+                        targetError ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                      }`}
+                      placeholder="Target"
+                      min="1"
+                      max="100000"
+                    />
+                    <button 
+                      onClick={handleSaveTarget}
+                      className="p-0.5 hover:bg-green-100 rounded text-green-600"
+                    >
+                      <Check size={14} />
+                    </button>
+                    <button 
+                      onClick={handleCancelEdit}
+                      className="p-0.5 hover:bg-red-100 rounded text-red-600"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Target {targetUnits.toLocaleString()} Units</span>
+                )}
               </div>
+              {targetError && (
+                <p className="text-[9px] text-red-500 mt-1">{targetError}</p>
+              )}
             </div>
 
             {/* Overall Efficiency */}
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-100">
               <h3 className="text-[10px] font-bold text-slate-500 uppercase mb-2">Overall Efficiency</h3>
-              <div className="text-2xl sm:text-4xl font-extrabold text-slate-800 mb-2">87.3%</div>
+              <div className="text-2xl sm:text-4xl font-extrabold text-slate-800 mb-2">
+                {overallEfficiency?.toFixed(1) ?? '--'}%
+              </div>
               <div className="flex items-center gap-2">
-                <div className="flex items-center text-green-500 text-xs font-bold bg-green-50 px-1 rounded">
-                  <TrendingUp size={12} className="mr-1" />
-                  +2.3%
+                <div className={`flex items-center text-xs font-bold px-1 rounded ${
+                  efficiencyTrend >= 0 ? 'text-green-500 bg-green-50' : 'text-red-500 bg-red-50'
+                }`}>
+                  {efficiencyTrend >= 0 ? (
+                    <TrendingUp size={12} className="mr-1" />
+                  ) : (
+                    <TrendingDown size={12} className="mr-1" />
+                  )}
+                  {efficiencyTrend >= 0 ? '+' : ''}{efficiencyTrend?.toFixed(1) ?? '0'}%
                 </div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Above Target</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase">
+                  {overallEfficiency >= 80 ? 'On Track' : overallEfficiency >= 60 ? 'Needs Attention' : 'Below Target'}
+                </span>
               </div>
             </div>
           </div>
@@ -68,22 +168,36 @@ const Dashboard = ({ bellClicked, thresholds, sensorData, webSocketClient, selec
           {/* OEE Bar */}
           <div className="bg-white p-3 sm:p-5 rounded-xl shadow-sm border border-slate-100 mb-4 sm:mb-8">
             <div className="flex justify-between items-end mb-2">
-              <h3 className="text-[10px] font-bold text-slate-500 uppercase">Overall Equipment Efficiency (OEE)</h3>
-              <span className="text-xs font-bold text-green-500">92.5%</span>
+              <div>
+                <h3 className="text-[10px] font-bold text-slate-500 uppercase">Overall Equipment Efficiency (OEE) - 24hr</h3>
+                <div className="flex gap-4 mt-1 text-[9px] text-slate-400">
+                  <span>Availability: {oeeData?.availability ?? '--'}%</span>
+                  <span>Performance: {oeeData?.performance ?? '--'}%</span>
+                  <span>Quality: {oeeData?.quality ?? '--'}%</span>
+                </div>
+              </div>
+              <span className={`text-xs font-bold ${
+                (oeeData?.oee || 0) >= 85 ? 'text-green-500' : 
+                (oeeData?.oee || 0) >= 60 ? 'text-yellow-500' : 'text-red-500'
+              }`}>{oeeData?.oee?.toFixed(1) ?? '--'}%</span>
             </div>
             <div className="h-6 sm:h-8 bg-slate-50 rounded w-full flex gap-[2px] overflow-hidden">
-              {/* Simulated segmented progress bar */}
+              {/* OEE segmented progress bar */}
               {Array.from({ length: 50 }).map((_, i) => (
                 <div
                   key={i}
-                  className={`flex-1 h-full rounded-sm ${i < 42 ? 'bg-[#4ADE80]' : 'bg-slate-200'}`}
+                  className={`flex-1 h-full rounded-sm ${
+                    i < oeeSegments 
+                      ? (oeeData?.oee || 0) >= 85 ? 'bg-[#4ADE80]' : (oeeData?.oee || 0) >= 60 ? 'bg-yellow-400' : 'bg-red-400'
+                      : 'bg-slate-200'
+                  }`}
                 ></div>
               ))}
             </div>
           </div>
 
           {/* Real Time Window Component */}
-          <RealTimeWindow thresholds={thresholds} sensorData={sensorData} webSocketClient={webSocketClient} selectedDevice={selectedDevice} />
+          <RealTimeWindow thresholds={thresholds} sensorData={sensorData} webSocketClient={webSocketClient} selectedDevice={selectedDevice} controlMode={controlMode} />
 
         </div>
 
@@ -104,14 +218,12 @@ const Dashboard = ({ bellClicked, thresholds, sensorData, webSocketClient, selec
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {logData.map((row, i) => (
-                    <tr key={i} className="hover:bg-slate-50 text-slate-600 font-medium">
-                      <td className="p-2 pl-3 whitespace-nowrap">{row.date}</td>
-                      <td className="p-2 whitespace-nowrap">{row.time}</td>
-                      <td className="p-2 whitespace-nowrap">{row.tag}</td>
-                      <td className="p-2 truncate max-w-[120px]">{row.product}</td>
-                    </tr>
-                  ))}
+                  {/* Production log entries will be populated from real-time data */}
+                  <tr>
+                    <td colSpan="4" className="p-4 text-center text-slate-400 text-xs">
+                      Waiting for production data...
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -120,27 +232,16 @@ const Dashboard = ({ bellClicked, thresholds, sensorData, webSocketClient, selec
           {/* Overall Efficiency Chart */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
             <h3 className="text-[10px] font-bold text-slate-800 uppercase mb-6">Overall Efficiency</h3>
-            <div className="h-40 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={productionData}>
-                  <XAxis
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 10, fill: '#94a3b8' }}
-                    interval="preserveStartEnd"
-                  />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="value"
-                    stroke="#60A5FA"
-                    strokeWidth={3}
-                    dot={{ r: 0 }}
-                    activeDot={{ r: 4 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+            <div className="h-40 w-full flex items-center justify-center">
+              <div className="text-center">
+                <div className={`text-4xl font-extrabold ${
+                  overallEfficiency >= 80 ? 'text-green-500' : 
+                  overallEfficiency >= 60 ? 'text-yellow-500' : 'text-red-500'
+                }`}>
+                  {overallEfficiency?.toFixed(1) ?? '--'}%
+                </div>
+                <p className="text-xs text-slate-400 mt-2">Current Efficiency</p>
+              </div>
             </div>
           </div>
 

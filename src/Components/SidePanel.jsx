@@ -1,7 +1,18 @@
 import React from 'react';
-import { LayoutDashboard, History, Settings, Pin, PinOff } from 'lucide-react';
+import { LayoutDashboard, History, Settings, Pin, PinOff, Play, Square } from 'lucide-react';
 
-const SidePanel = ({ activeTab, setActiveTab, isOpen, isPinned, togglePin, onMouseEnter, onMouseLeave }) => {
+const SidePanel = ({ 
+  activeTab, 
+  setActiveTab, 
+  isOpen, 
+  isPinned, 
+  togglePin, 
+  onMouseEnter, 
+  onMouseLeave,
+  isEmergencyStopped,
+  onEmergencyStop,
+  onResumeSystem
+}) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'historical', label: 'Historical Data', icon: History },
@@ -67,15 +78,36 @@ const SidePanel = ({ activeTab, setActiveTab, isOpen, isPinned, togglePin, onMou
           })}
         </nav>
 
-        {/* Emergency Stop */}
+        {/* Emergency Stop / Resume */}
         <div className="p-3 sm:p-4 mt-auto">
-          <div className="bg-slate-600 rounded-xl p-3 sm:p-4 text-center shadow-lg">
-            <p className="text-slate-300 text-[10px] sm:text-xs mb-2 sm:mb-3 leading-tight">
-              Stops all active machinery immediately. Use only in <br /> <span className="font-bold">EMERGENCIES</span>
-            </p>
-            <button className="w-full bg-[#DC3838] hover:bg-red-700 text-white font-bold py-2 sm:py-3 rounded-lg shadow-md transition-colors flex items-center justify-center gap-2 text-xs sm:text-sm">
-              EMERGENCY STOP
-            </button>
+          <div className={`rounded-xl p-3 sm:p-4 text-center shadow-lg ${isEmergencyStopped ? 'bg-amber-600' : 'bg-slate-600'}`}>
+            {isEmergencyStopped ? (
+              <>
+                <p className="text-amber-100 text-[10px] sm:text-xs mb-2 sm:mb-3 leading-tight">
+                  System is <span className="font-bold">PAUSED</span>. Click below to resume operations.
+                </p>
+                <button 
+                  onClick={onResumeSystem}
+                  className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 sm:py-3 rounded-lg shadow-md transition-colors flex items-center justify-center gap-2 text-xs sm:text-sm"
+                >
+                  <Play size={18} fill="white" />
+                  RESUME SYSTEM
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-slate-300 text-[10px] sm:text-xs mb-2 sm:mb-3 leading-tight">
+                  Stops all active machinery immediately. Use only in <br /> <span className="font-bold">EMERGENCIES</span>
+                </p>
+                <button 
+                  onClick={onEmergencyStop}
+                  className="w-full bg-[#DC3838] hover:bg-red-700 text-white font-bold py-2 sm:py-3 rounded-lg shadow-md transition-colors flex items-center justify-center gap-2 text-xs sm:text-sm"
+                >
+                  <Square size={18} fill="white" />
+                  EMERGENCY STOP
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

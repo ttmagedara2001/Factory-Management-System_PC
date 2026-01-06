@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { History, Calendar, Download, Filter, Search, TrendingUp, AlertTriangle, Eye, EyeOff, X, Loader2, RefreshCw } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, CartesianGrid } from 'recharts';
-import FactoryStatus from './FactoryStatus';
 import {
   fetchAllHistoricalData,
   getOEEChartData,
@@ -14,7 +13,7 @@ import {
 
 
 
-const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice, setSelectedDevice, sensorHistory = {} }) => {
+const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice, setSelectedDevice, sensorHistory = {}, factoryStatus = 'RUNNING' }) => {
   const [dateRange, setDateRange] = useState('24h');
   const [granularity, setGranularity] = useState('hourly');
   const [searchTerm, setSearchTerm] = useState('');
@@ -262,8 +261,20 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
         <div className="flex items-center gap-2 sm:gap-3">
           <History size={24} className="text-slate-600" />
           <h1 className="text-lg sm:text-xl font-bold text-slate-800 uppercase tracking-wide">Historical Data</h1>
+          <button
+            onClick={loadHistoricalData}
+            disabled={isLoading}
+            className="p-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
+            title="Refresh data"
+          >
+            {isLoading ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <RefreshCw size={16} />
+            )}
+          </button>
         </div>
-        <FactoryStatus />
+
       </div>
 
       {/* Time Range & Interval Controls */}
@@ -334,20 +345,6 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
 
           {/* Refresh & Export Buttons */}
           <div className="flex items-center gap-3">
-            {/* Loading/Refresh Indicator */}
-            <button
-              onClick={loadHistoricalData}
-              disabled={isLoading}
-              className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors disabled:opacity-50"
-            >
-              {isLoading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <RefreshCw size={16} />
-              )}
-              {isLoading ? 'Loading...' : 'Refresh'}
-            </button>
-
             {/* Last Updated Indicator */}
             {lastUpdated && !isLoading && (
               <span className="text-xs text-slate-400">

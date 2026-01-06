@@ -4,7 +4,7 @@ import EnvironmentCard from './EnvironmentCard';
 import Gauge from './Gauge';
 import { updateStateDetails } from '../services/deviceService.js';
 
-const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevice }) => {
+const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevice, controlMode = 'manual' }) => {
   const [ventilation, setVentilation] = useState(true);
   const [isSendingCommand, setIsSendingCommand] = useState(false);
 
@@ -185,7 +185,9 @@ const RealTimeWindow = ({ thresholds, sensorData, webSocketClient, selectedDevic
           <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
             <div className="flex flex-col items-start sm:items-end">
               <span className="text-[9px] sm:text-[10px] font-bold text-slate-600 uppercase">Ventilation Control:</span>
-              <span className="text-[7px] sm:text-[8px] bg-green-200 text-green-800 px-1 rounded uppercase font-bold">Manual</span>
+              <span className={`text-[7px] sm:text-[8px] px-1 rounded uppercase font-bold ${
+                controlMode === 'manual' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'
+              }`}>{controlMode === 'manual' ? 'Manual' : 'Auto'}</span>
             </div>
 
             <div

@@ -1,16 +1,122 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, AlertTriangle, Play, Square } from 'lucide-react';
-import FactoryStatus from './FactoryStatus.jsx';
+import { Settings, Save, AlertTriangle, Play, Square, AlertCircle } from 'lucide-react';
 import { updateStateDetails } from '../services/deviceService.js';
 
-const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketClient, selectedDevice }) => {
+const SettingsWindow = ({ 
+  thresholds, 
+  setThresholds, 
+  currentValues, 
+  webSocketClient, 
+  selectedDevice,
+  controlMode,
+  setControlMode,
+  factoryStatus,
+  isEmergencyStopped
+}) => {
   const [localThresholds, setLocalThresholds] = useState(thresholds);
   const [saved, setSaved] = useState(false);
-  const [controlMode, setControlMode] = useState('auto'); // 'auto' or 'manual'
-  const [machineStatus, setMachineStatus] = useState('running'); // 'running' or 'stopped'
+  const [machineStatus, setMachineStatus] = useState(isEmergencyStopped ? 'stopped' : 'running');
   const [isSendingCommand, setIsSendingCommand] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // Update machine status when emergency stop changes
+  useEffect(() => {
+    setMachineStatus(isEmergencyStopped ? 'stopped' : 'running');
+  }, [isEmergencyStopped]);
+
+  // Validation function
+  const validateField = (category, field, value) => {
+    const numValue = parseFloat(value);
+    const errors = { ...validationErrors };
+    const errorKey = `${category}_${field}`;
+    
+    if (isNaN(numValue)) {
+      errors[errorKey] = 'Must be a valid number';
+      setValidationErrors(errors);
+      return false;
+    }
+    
+    if (numValue < 0) {
+      errors[errorKey] = 'Cannot be negative';
+      setValidationErrors(errors);
+      return false;
+    }
+    
+    // Category-specific validation
+    if (category === 'temperature') {
+      if (field === 'min' && numValue < -40) {
+        errors[errorKey] = 'Min cannot be below -40°C';
+        setValidationErrors(errors);
+        return false;
+      }
+      if (field === 'max' && numValue > 100) {
+        errors[errorKey] = 'Max cannot exceed 100°C';
+        setValidationErrors(errors);
+        return false;
+      }
+      if (field === 'min' && numValue >= localThresholds.temperature.max) {
+        errors[errorKey] = 'Min must be less than max';
+        setValidationErrors(errors);
+        return false;
+      }
+      if (field === 'max' && numValue <= localThresholds.temperature.min) {
+        errors[errorKey] = 'Max must be greater than min';
+        setValidationErrors(errors);
+        return false;
+      }
+    }
+    
+    if (category === 'humidity' || category === 'co2') {
+      if (numValue > 100) {
+        errors[errorKey] = 'Cannot exceed 100%';
+        setValidationErrors(errors);
+        return false;
+      }
+      if (field === 'min' && numValue >= localThresholds[category].max) {
+        errors[errorKey] = 'Min must be less than max';
+        setValidationErrors(errors);
+        return false;
+      }
+      if (field === 'max' && numValue <= localThresholds[category].min) {
+        errors[errorKey] = 'Max must be greater than min';
+        setValidationErrors(errors);
+        return false;
+      }
+    }
+    
+    if (category === 'pressure') {
+      if (field === 'min' && numValue >= localThresholds.pressure.max) {
+        errors[errorKey] = 'Min must be less than max';
+        setValidationErrors(errors);
+        return false;
+      }
+      if (field === 'max' && numValue <= localThresholds.pressure.min) {
+        errors[errorKey] = 'Max must be greater than min';
+        setValidationErrors(errors);
+        return false;
+      }
+    }
+    
+    if (category === 'vibration' && numValue > 50) {
+      errors[errorKey] = 'Critical cannot exceed 50 mm/s';
+      setValidationErrors(errors);
+      return false;
+    }
+    
+    if (category === 'noise' && numValue > 150) {
+      errors[errorKey] = 'Critical cannot exceed 150 dB';
+      setValidationErrors(errors);
+      return false;
+    }
+    
+    // Clear error if validation passes
+    delete errors[errorKey];
+    setValidationErrors(errors);
+    return true;
+  };
 
   const handleChange = (category, field, value) => {
+    validateField(category, field, value);
     setLocalThresholds(prev => ({
       ...prev,
       [category]: {
@@ -21,6 +127,11 @@ const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketCli
   };
 
   const handleSave = () => {
+    // Check for any validation errors before saving
+    if (Object.keys(validationErrors).length > 0) {
+      alert('Please fix validation errors before saving');
+      return;
+    }
     setThresholds(localThresholds);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -70,30 +181,36 @@ const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketCli
   };
 
   const CurrentValueBadge = ({ value, unit }) => (
-    <div className="flex items-center gap-2 mb-3 bg-blue-50 border border-blue-200 rounded-lg p-2">
+    <div className="flex items-center gap-2 mb-2 bg-blue-50 border border-blue-200 rounded-lg p-1.5">
       <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-      <span className="text-xs text-blue-700 font-semibold">Current: </span>
-      <span className="text-sm font-bold text-blue-900">{value}{unit}</span>
+      <span className="text-[10px] text-blue-700 font-semibold">Current: </span>
+      <span className="text-xs font-bold text-blue-900">{value}{unit}</span>
     </div>
   );
 
+  const ValidationError = ({ error }) => error ? (
+    <div className="flex items-center gap-1 mt-1 text-[9px] text-red-500">
+      <AlertCircle size={10} />
+      <span>{error}</span>
+    </div>
+  ) : null;
+
   return (
-    <div className="p-8 max-w-[1400px] mx-auto">
+    <div className="p-4 sm:p-6 max-w-[1400px] mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div className="flex items-center gap-3">
-          <Settings size={28} className="text-slate-600" />
-          <h1 className="text-xl font-bold text-slate-800 uppercase tracking-wide">Threshold Settings</h1>
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-2">
+          <Settings size={22} className="text-slate-600" />
+          <h1 className="text-lg font-bold text-slate-800 uppercase tracking-wide">Threshold Settings</h1>
         </div>
-        <FactoryStatus />
       </div>
 
-      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-lg">
-        <div className="flex items-start gap-3">
-          <AlertTriangle size={20} className="text-yellow-600 mt-0.5" />
+      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4 rounded-lg">
+        <div className="flex items-start gap-2">
+          <AlertTriangle size={16} className="text-yellow-600 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-yellow-800">Critical Alert Configuration</p>
-            <p className="text-xs text-yellow-700 mt-1">
+            <p className="text-xs font-semibold text-yellow-800">Critical Alert Configuration</p>
+            <p className="text-[10px] text-yellow-700 mt-0.5">
               Set threshold values to trigger critical alerts. When values exceed critical thresholds, 
               indicators will turn red and alerts will be generated.
             </p>
@@ -102,19 +219,19 @@ const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketCli
       </div>
 
       {/* Machine Control Section */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mb-6">
-        <h3 className="text-sm font-bold text-slate-800 uppercase mb-4 pb-2 border-b border-slate-200">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 mb-4">
+        <h3 className="text-xs font-bold text-slate-800 uppercase mb-3 pb-2 border-b border-slate-200">
           Machine Control
         </h3>
         
         <div className="flex items-center justify-between">
           {/* Control Mode Toggle */}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-3">Control Mode</label>
-            <div className="flex items-center gap-3 bg-slate-100 p-1 rounded-lg">
+            <label className="block text-[10px] font-semibold text-slate-600 mb-2">Control Mode</label>
+            <div className="flex items-center gap-2 bg-slate-100 p-0.5 rounded-lg">
               <button
                 onClick={() => handleControlModeChange('auto')}
-                className={`px-6 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
+                className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all duration-300 ${
                   controlMode === 'auto'
                     ? 'bg-green-500 text-white shadow-md'
                     : 'text-slate-600 hover:text-slate-800'
@@ -124,7 +241,7 @@ const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketCli
               </button>
               <button
                 onClick={() => handleControlModeChange('manual')}
-                className={`px-6 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
+                className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all duration-300 ${
                   controlMode === 'manual'
                     ? 'bg-blue-500 text-white shadow-md'
                     : 'text-slate-600 hover:text-slate-800'
@@ -137,12 +254,12 @@ const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketCli
 
           {/* Machine Control Button */}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-3">Machine Status</label>
+            <label className="block text-[10px] font-semibold text-slate-600 mb-2">Machine Status</label>
             <button
               onClick={handleMachineToggle}
-              disabled={controlMode === 'auto'}
-              className={`flex items-center gap-3 px-8 py-3 rounded-lg font-bold text-white transition-all duration-300 ${
-                controlMode === 'auto'
+              disabled={controlMode === 'auto' || isEmergencyStopped}
+              className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold text-white transition-all duration-300 text-xs ${
+                controlMode === 'auto' || isEmergencyStopped
                   ? 'bg-slate-300 cursor-not-allowed'
                   : machineStatus === 'running'
                   ? 'bg-red-500 hover:bg-red-600 shadow-lg'
@@ -151,138 +268,146 @@ const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketCli
             >
               {machineStatus === 'running' ? (
                 <>
-                  <Square size={20} fill="white" />
-                  <span>STOP MACHINE</span>
+                  <Square size={16} fill="white" />
+                  <span>STOP</span>
                 </>
               ) : (
                 <>
-                  <Play size={20} fill="white" />
-                  <span>START MACHINE</span>
+                  <Play size={16} fill="white" />
+                  <span>START</span>
                 </>
               )}
             </button>
-            {controlMode === 'auto' && (
-              <p className="text-xs text-slate-500 mt-2 text-center">
-                Switch to Manual mode to control
+            {(controlMode === 'auto' || isEmergencyStopped) && (
+              <p className="text-[9px] text-slate-500 mt-1 text-center">
+                {isEmergencyStopped ? 'Emergency stopped' : 'Switch to Manual'}
               </p>
             )}
           </div>
         </div>
 
         {/* Status Indicator */}
-        <div className="mt-4 flex items-center gap-3 bg-slate-50 p-3 rounded-lg">
-          <div className={`w-3 h-3 rounded-full ${
+        <div className="mt-3 flex items-center gap-2 bg-slate-50 p-2 rounded-lg text-xs">
+          <div className={`w-2.5 h-2.5 rounded-full ${
             machineStatus === 'running' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
           }`}></div>
-          <span className="text-sm font-semibold text-slate-700">
-            Current Status: 
-            <span className={`ml-2 ${
+          <span className="font-semibold text-slate-700">
+            Status: 
+            <span className={`ml-1 ${
               machineStatus === 'running' ? 'text-green-600' : 'text-red-600'
             }`}>
               {machineStatus === 'running' ? 'RUNNING' : 'STOPPED'}
             </span>
           </span>
-          <span className="text-xs text-slate-500 ml-auto">
+          <span className="text-[10px] text-slate-500 ml-auto">
             Mode: <span className="font-bold">{controlMode.toUpperCase()}</span>
           </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Machine Performance Thresholds */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <h3 className="text-sm font-bold text-slate-800 uppercase mb-4 pb-2 border-b border-slate-200">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+          <h3 className="text-xs font-bold text-slate-800 uppercase mb-3 pb-2 border-b border-slate-200">
             Machine Performance
           </h3>
           
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-2">Vibration (mm/s)</label>
+              <label className="block text-[10px] font-semibold text-slate-600 mb-1">Vibration (mm/s)</label>
               <CurrentValueBadge value={currentValues.vibration} unit=" mm/s" />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase block mb-1">Warning Level</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Min Threshold</span>
                   <input
                     type="number"
                     step="0.1"
-                    value={localThresholds.vibration.warning}
-                    onChange={(e) => handleChange('vibration', 'warning', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={localThresholds.vibration.min || 0}
+                    onChange={(e) => handleChange('vibration', 'min', e.target.value)}
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.vibration_min ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.vibration_min} />
                 </div>
                 <div>
-                  <span className="text-[10px] text-red-600 uppercase font-bold block mb-1">Critical Level</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Max (Critical)</span>
                   <input
                     type="number"
                     step="0.1"
                     value={localThresholds.vibration.critical}
                     onChange={(e) => handleChange('vibration', 'critical', e.target.value)}
-                    className="w-full px-3 py-2 border border-red-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.vibration_critical ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.vibration_critical} />
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-2">Pressure (bar)</label>
+              <label className="block text-[10px] font-semibold text-slate-600 mb-1">Pressure (bar)</label>
               <CurrentValueBadge value={currentValues.pressure} unit=" bar" />
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase block mb-1">Min Threshold</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Min Threshold</span>
                   <input
                     type="number"
                     step="1"
                     value={localThresholds.pressure.min}
                     onChange={(e) => handleChange('pressure', 'min', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.pressure_min ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.pressure_min} />
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase block mb-1">Max Threshold</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Max (Critical)</span>
                   <input
                     type="number"
                     step="1"
                     value={localThresholds.pressure.max}
                     onChange={(e) => handleChange('pressure', 'max', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.pressure_max ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
-                </div>
-                <div>
-                  <span className="text-[10px] text-yellow-600 uppercase font-bold block mb-1">Warning Level</span>
-                  <input
-                    type="number"
-                    step="1"
-                    value={localThresholds.pressure.warning}
-                    onChange={(e) => handleChange('pressure', 'warning', e.target.value)}
-                    className="w-full px-3 py-2 border border-yellow-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                  />
+                  <ValidationError error={validationErrors.pressure_max} />
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-2">Noise Level (dB)</label>
+              <label className="block text-[10px] font-semibold text-slate-600 mb-1">Noise Level (dB)</label>
               <CurrentValueBadge value={currentValues.noise} unit=" dB" />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase block mb-1">Warning Level</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Min Threshold</span>
                   <input
                     type="number"
                     step="1"
-                    value={localThresholds.noise.warning}
-                    onChange={(e) => handleChange('noise', 'warning', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={localThresholds.noise.min || 0}
+                    onChange={(e) => handleChange('noise', 'min', e.target.value)}
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.noise_min ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.noise_min} />
                 </div>
                 <div>
-                  <span className="text-[10px] text-red-600 uppercase font-bold block mb-1">Critical Level</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Max (Critical)</span>
                   <input
                     type="number"
                     step="1"
                     value={localThresholds.noise.critical}
                     onChange={(e) => handleChange('noise', 'critical', e.target.value)}
-                    className="w-full px-3 py-2 border border-red-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.noise_critical ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.noise_critical} />
                 </div>
               </div>
             </div>
@@ -290,89 +415,107 @@ const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketCli
         </div>
 
         {/* Environment Thresholds */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <h3 className="text-sm font-bold text-slate-800 uppercase mb-4 pb-2 border-b border-slate-200">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+          <h3 className="text-xs font-bold text-slate-800 uppercase mb-3 pb-2 border-b border-slate-200">
             Environment Analysis
           </h3>
           
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-2">Temperature (°C)</label>
+              <label className="block text-[10px] font-semibold text-slate-600 mb-1">Temperature (°C)</label>
               <CurrentValueBadge value={currentValues.temperature} unit="°C" />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase block mb-1">Min Threshold</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Min Threshold</span>
                   <input
                     type="number"
                     step="0.1"
                     value={localThresholds.temperature.min}
                     onChange={(e) => handleChange('temperature', 'min', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.temperature_min ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.temperature_min} />
                 </div>
                 <div>
-                  <span className="text-[10px] text-red-600 uppercase font-bold block mb-1">Max Threshold</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Max (Critical)</span>
                   <input
                     type="number"
                     step="0.1"
                     value={localThresholds.temperature.max}
                     onChange={(e) => handleChange('temperature', 'max', e.target.value)}
-                    className="w-full px-3 py-2 border border-red-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.temperature_max ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.temperature_max} />
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-2">Humidity (%)</label>
+              <label className="block text-[10px] font-semibold text-slate-600 mb-1">Humidity (%)</label>
               <CurrentValueBadge value={currentValues.humidity} unit="%" />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase block mb-1">Min Threshold</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Min Threshold</span>
                   <input
                     type="number"
                     step="1"
                     value={localThresholds.humidity.min}
                     onChange={(e) => handleChange('humidity', 'min', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.humidity_min ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.humidity_min} />
                 </div>
                 <div>
-                  <span className="text-[10px] text-red-600 uppercase font-bold block mb-1">Max Threshold</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Max (Critical)</span>
                   <input
                     type="number"
                     step="1"
                     value={localThresholds.humidity.max}
                     onChange={(e) => handleChange('humidity', 'max', e.target.value)}
-                    className="w-full px-3 py-2 border border-red-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.humidity_max ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.humidity_max} />
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-2">CO2 (%)</label>
+              <label className="block text-[10px] font-semibold text-slate-600 mb-1">CO2 (%)</label>
               <CurrentValueBadge value={currentValues.co2} unit="%" />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase block mb-1">Min Threshold</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Min Threshold</span>
                   <input
                     type="number"
                     step="1"
                     value={localThresholds.co2.min}
                     onChange={(e) => handleChange('co2', 'min', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.co2_min ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.co2_min} />
                 </div>
                 <div>
-                  <span className="text-[10px] text-red-600 uppercase font-bold block mb-1">Max Threshold</span>
+                  <span className="text-[9px] text-slate-500 uppercase block mb-1">Max (Critical)</span>
                   <input
                     type="number"
                     step="1"
                     value={localThresholds.co2.max}
                     onChange={(e) => handleChange('co2', 'max', e.target.value)}
-                    className="w-full px-3 py-2 border border-red-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className={`w-full px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 ${
+                      validationErrors.co2_max ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                    }`}
                   />
+                  <ValidationError error={validationErrors.co2_max} />
                 </div>
               </div>
             </div>
@@ -381,15 +524,16 @@ const SettingsWindow = ({ thresholds, setThresholds, currentValues, webSocketCli
       </div>
 
       {/* Save Button */}
-      <div className="mt-8 flex justify-end">
+      <div className="mt-4 flex justify-end">
         <button
           onClick={handleSave}
-          className={`flex items-center gap-2 px-8 py-3 rounded-lg font-bold text-white transition-all duration-300 ${
-            saved ? 'bg-green-500' : 'bg-blue-500 hover:bg-blue-600'
+          disabled={Object.keys(validationErrors).length > 0}
+          className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold text-white transition-all duration-300 text-sm ${
+            saved ? 'bg-green-500' : Object.keys(validationErrors).length > 0 ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
           }`}
         >
-          <Save size={18} />
-          {saved ? 'Settings Saved!' : 'Save Threshold Settings'}
+          <Save size={16} />
+          {saved ? 'Settings Saved!' : 'Save Settings'}
         </button>
       </div>
     </div>
