@@ -152,6 +152,35 @@ export const resetUnits = (deviceId) => {
   console.log(`🔄 [ProductionService] Reset units for ${deviceId}`);
 };
 
+/**
+ * Set units from backend value (used on WebSocket connection)
+ * This initializes or updates the local count with the backend's authoritative value.
+ * Only updates if the backend value is greater than local (to not lose local increments).
+ * @param {string} deviceId - Device ID
+ * @param {number} backendUnits - Unit count from backend
+ * @returns {number} The set unit count
+ */
+export const setUnitsFromBackend = (deviceId, backendUnits) => {
+  const data = getProductionData(deviceId);
+  const localUnits = data.units || 0;
+
+  // Use backend value if it's greater or if local is 0 (fresh start)
+  if (backendUnits >= localUnits || localUnits === 0) {
+    data.units = backendUnits;
+    saveProductionData(deviceId, data);
+    console.log(
+      `📥 [ProductionService] Set units from backend: ${backendUnits} for ${deviceId}`
+    );
+    return backendUnits;
+  } else {
+    // Keep local value if it's higher (local increments happened before backend sync)
+    console.log(
+      `ℹ️ [ProductionService] Keeping local units (${localUnits}) > backend (${backendUnits}) for ${deviceId}`
+    );
+    return localUnits;
+  }
+};
+
 // ═══════════════════════════════════════════════════════════════════════
 // Production Log Management
 // ═══════════════════════════════════════════════════════════════════════
@@ -285,6 +314,7 @@ export default {
   incrementUnits,
   getUnits,
   resetUnits,
+  setUnitsFromBackend,
   getProductionLog,
   addProductToLog,
   clearProductionLog,

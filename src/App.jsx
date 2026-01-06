@@ -6,7 +6,7 @@ import SettingsWindow from './Components/SettingsWindow';
 import HistoricalWindow from './Components/HistoricalWindow';
 import { useAuth } from './Context/AuthContext';
 import { webSocketClient } from './services/webSocketClient';
-import { getProductionData, getProductionLog } from './services/productionService';
+import { getProductionData, getProductionLog, setUnitsFromBackend } from './services/productionService';
 
 export default function App() {
   const { auth } = useAuth();
@@ -301,13 +301,30 @@ export default function App() {
         setIsConnecting(true);
 
         // Set up WebSocket callbacks
-        webSocketClient.onConnect(() => {
+        webSocketClient.onConnect(async () => {
           console.log('✅ [App] WebSocket connected!');
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           console.log('📡 STOMP WebSocket Connection Established');
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           setIsWebSocketConnected(true);
           setIsConnecting(false);
+
+          // Fetch initial units from backend on connection
+          try {
+            const { getCurrentUnitsFromBackend } = await import('./services/deviceService');
+            const currentDevice = localStorage.getItem('selectedDevice') || 'device9988';
+            const backendUnits = await getCurrentUnitsFromBackend(currentDevice);
+            
+            if (backendUnits > 0) {
+              console.log(`📊 [App] Initializing units from backend: ${backendUnits}`);
+              // Update production service with backend value
+              setUnitsFromBackend(currentDevice, backendUnits);
+              // Update UI state
+              setSensorData(prev => ({ ...prev, units: backendUnits }));
+            }
+          } catch (error) {
+            console.warn('⚠️ [App] Could not fetch initial units from backend:', error.message);
+          }
         });
 
         webSocketClient.onDisconnect(() => {
@@ -420,12 +437,28 @@ export default function App() {
   }, [selectedDevice, isWebSocketConnected]);
 
   // Handle device selection change
-  const handleDeviceChange = (deviceId) => {
+  const handleDeviceChange = async (deviceId) => {
     console.log(`🔄 [App] Device changed to: ${deviceId}`);
     
     // Load production data for the new device from localStorage (24hr valid)
-    const productionData = getProductionData(deviceId);
+    let productionData = getProductionData(deviceId);
     const productionLogData = getProductionLog(deviceId);
+    
+    // Fetch units from backend for the new device
+    if (isWebSocketConnected) {
+      try {
+        const { getCurrentUnitsFromBackend } = await import('./services/deviceService');
+        const backendUnits = await getCurrentUnitsFromBackend(deviceId);
+        
+        if (backendUnits > 0) {
+          console.log(`📊 [App] Fetched units from backend for ${deviceId}: ${backendUnits}`);
+          setUnitsFromBackend(deviceId, backendUnits);
+          productionData = getProductionData(deviceId); // Refresh after update
+        }
+      } catch (error) {
+        console.warn('⚠️ [App] Could not fetch units from backend:', error.message);
+      }
+    }
     
     // Reset sensor data when switching devices, but load persisted units
     setSensorData({
@@ -436,7 +469,7 @@ export default function App() {
       humidity: null,
       co2: null,
       airQuality: null,
-      units: productionData.units, // Load from localStorage
+      units: productionData.units, // Load from localStorage (possibly updated from backend)
       ventilation: null,
       machineControl: null
     });

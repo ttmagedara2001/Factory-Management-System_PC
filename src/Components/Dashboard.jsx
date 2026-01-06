@@ -240,22 +240,6 @@ const Dashboard = ({
             </div>
           </div>
 
-          {/* Overall Efficiency Chart */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-            <h3 className="text-[10px] font-bold text-slate-800 uppercase mb-6">Overall Efficiency</h3>
-            <div className="h-40 w-full flex items-center justify-center">
-              <div className="text-center">
-                <div className={`text-4xl font-extrabold ${
-                  overallEfficiency >= 80 ? 'text-green-500' : 
-                  overallEfficiency >= 60 ? 'text-yellow-500' : 'text-red-500'
-                }`}>
-                  {overallEfficiency?.toFixed(1) ?? '--'}%
-                </div>
-                <p className="text-xs text-slate-400 mt-2">Current Efficiency</p>
-              </div>
-            </div>
-          </div>
-
           {/* Active Alerts (only for selected device, filtered in App.jsx) */}
           <div
             id="active-alerts"

@@ -388,6 +388,58 @@ export const getStateDetailsByTopic = async (deviceId, topic) => {
   }
 };
 
+/**
+ * Get the current production units count for a device from the backend
+ *
+ * This fetches the latest units value from the stream data.
+ * Used to initialize the unit count when WebSocket connects.
+ *
+ * @param {string} deviceId - Factory device ID
+ * @returns {Promise<number>} Current unit count from backend
+ */
+export const getCurrentUnitsFromBackend = async (deviceId) => {
+  try {
+    console.log(`📊 [HTTP API] Fetching current units for ${deviceId}`);
+
+    // Get the most recent stream data to find current units
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const response = await api.post("/get-stream-data/device/topic", {
+      deviceId,
+      topicSuffix: "units",
+      startTime: startOfDay.toISOString(),
+      endTime: now.toISOString(),
+      pagination: "0",
+      pageSize: "1", // Only need the most recent
+    });
+
+    if (response.data.status === "Success" && response.data.data?.length > 0) {
+      // Get the most recent units value
+      const latestRecord = response.data.data[response.data.data.length - 1];
+      const units = parseInt(latestRecord.payload, 10) || 0;
+      console.log(`✅ [HTTP API] Current units from backend: ${units}`);
+      return units;
+    }
+
+    console.log(
+      `ℹ️ [HTTP API] No units data found for ${deviceId}, returning 0`
+    );
+    return 0;
+  } catch (error) {
+    console.error(
+      `❌ [HTTP API] Failed to get current units for ${deviceId}:`,
+      {
+        status: error.response?.status,
+        message: error.message,
+      }
+    );
+    // Return 0 on error - don't throw, let the app continue
+    return 0;
+  }
+};
+
 // ============================================
 // NOTES
 // ============================================
