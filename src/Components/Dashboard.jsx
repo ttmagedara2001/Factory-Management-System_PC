@@ -19,7 +19,8 @@ const Dashboard = ({
   efficiencyTrend,
   oeeData,
   factoryStatus,
-  controlMode
+  controlMode,
+  productionLog = []
 }) => {
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [tempTargetUnits, setTempTargetUnits] = useState(targetUnits);
@@ -218,12 +219,22 @@ const Dashboard = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {/* Production log entries will be populated from real-time data */}
-                  <tr>
-                    <td colSpan="4" className="p-4 text-center text-slate-400 text-xs">
-                      Waiting for production data...
-                    </td>
-                  </tr>
+                  {productionLog && productionLog.length > 0 ? (
+                    [...productionLog].reverse().map((entry, index) => (
+                      <tr key={entry.id || index} className="hover:bg-slate-50">
+                        <td className="p-2 pl-3 text-slate-600">{entry.date}</td>
+                        <td className="p-2 text-slate-600">{entry.time}</td>
+                        <td className="p-2 font-mono text-blue-600">{entry.productID}</td>
+                        <td className="p-2 text-slate-800">{entry.productName}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="4" className="p-4 text-center text-slate-400 text-xs">
+                        Waiting for production data...
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

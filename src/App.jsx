@@ -6,6 +6,7 @@ import SettingsWindow from './Components/SettingsWindow';
 import HistoricalWindow from './Components/HistoricalWindow';
 import { useAuth } from './Context/AuthContext';
 import { webSocketClient } from './services/webSocketClient';
+import { getProductionData, getProductionLog } from './services/productionService';
 
 export default function App() {
   const { auth } = useAuth();
@@ -37,17 +38,28 @@ export default function App() {
   ]);
 
   // Real-time sensor data from MQTT
-  const [sensorData, setSensorData] = useState({
-    vibration: null,
-    pressure: null,
-    noise: null,
-    temperature: null,
-    humidity: null,
-    co2: null,
-    airQuality: null,
-    units: null, // Production units
-    ventilation: null,
-    machineControl: null
+  const [sensorData, setSensorData] = useState(() => {
+    // Load units from localStorage on initial render (24-hour persistence)
+    const initialDevice = localStorage.getItem('selectedDevice') || 'device9988';
+    const productionData = getProductionData(initialDevice);
+    return {
+      vibration: null,
+      pressure: null,
+      noise: null,
+      temperature: null,
+      humidity: null,
+      co2: null,
+      airQuality: null,
+      units: productionData.units, // Load from localStorage (24hr valid)
+      ventilation: null,
+      machineControl: null
+    };
+  });
+
+  // Production log for Recent Production Log table
+  const [productionLog, setProductionLog] = useState(() => {
+    const initialDevice = localStorage.getItem('selectedDevice') || 'device9988';
+    return getProductionLog(initialDevice);
   });
 
   // Threshold state management
@@ -134,18 +146,15 @@ export default function App() {
     return () => clearInterval(interval);
   }, [sensorData.units, targetUnits, isEmergencyStopped]);
 
-  // Update factory status based on various conditions
+  // Update factory status based on emergency stop only
+  // Sensor alerts do NOT affect factory status - only the emergency stop button
   useEffect(() => {
     if (isEmergencyStopped) {
       setFactoryStatus('STOPPED');
-    } else if (alerts.some(a => a.severity === 'critical')) {
-      setFactoryStatus('CRITICAL');
-    } else if (alerts.some(a => a.severity === 'warning')) {
-      setFactoryStatus('WARNING');
     } else {
       setFactoryStatus('RUNNING');
     }
-  }, [alerts, isEmergencyStopped]);
+  }, [isEmergencyStopped]);
 
   // Emergency Stop Handler
   const handleEmergencyStop = useCallback(async () => {
@@ -337,9 +346,41 @@ export default function App() {
       webSocketClient.subscribeToDevice(selectedDevice, (data) => {
         console.log('📊 [App] Sensor data received:', data);
 
+        // Handle product detection - update production log
+        if (data.sensorType === 'product' && typeof data.value === 'object') {
+          const { logEntry } = data.value;
+          if (logEntry) {
+            setProductionLog(prev => [...prev, logEntry].slice(-100)); // Keep last 100 entries
+          }
+          return;
+        }
+
         // Handle MQTTX-style topic/payload messages
         if (data.sensorType === 'payload' && typeof data.value === 'object') {
-          // {sensorType: 'payload', value: {vibration: 7}, ...}
+          // Check if this is a product payload (has productID and productName)
+          if (data.value.productID || data.value.productId || data.value.productName) {
+            // This is a product detection message - increment units and log
+            const productID = data.value.productID || data.value.productId || 'UNKNOWN';
+            const productName = data.value.productName || 'Unknown Product';
+            
+            console.log(`📦 [App] Product detected: ${productID} - ${productName}`);
+            
+            // Import production service functions dynamically
+            import('./services/productionService').then(({ incrementUnits, addProductToLog }) => {
+              // Add product to log
+              const logEntry = addProductToLog(selectedDevice, { productID, productName });
+              setProductionLog(prev => [...prev, logEntry].slice(-100));
+              
+              // Increment units and update sensor data
+              const newUnitCount = incrementUnits(selectedDevice);
+              setSensorData(prev => ({ ...prev, units: newUnitCount }));
+              
+              console.log(`📊 [App] Unit count increased to: ${newUnitCount}`);
+            });
+            return;
+          }
+          
+          // Regular sensor payload - {sensorType: 'payload', value: {vibration: 7}, ...}
           const updates = {};
           Object.entries(data.value).forEach(([key, value]) => {
             updates[key] = value;
@@ -356,8 +397,9 @@ export default function App() {
           return;
         }
         if (data.sensorType === 'topic' && typeof data.value === 'string' && data.value.startsWith('fmc/')) {
-          // {sensorType: 'topic', value: 'fmc/vibration', ...}
-          // Not enough info to update value, skip
+          // {sensorType: 'topic', value: 'fmc/product', ...}
+          // This is just the topic notification, actual data comes in 'payload'
+          // Skip processing
           return;
         }
         // Normal per-sensor update
@@ -381,7 +423,11 @@ export default function App() {
   const handleDeviceChange = (deviceId) => {
     console.log(`🔄 [App] Device changed to: ${deviceId}`);
     
-    // Reset sensor data when switching devices to avoid showing stale data
+    // Load production data for the new device from localStorage (24hr valid)
+    const productionData = getProductionData(deviceId);
+    const productionLogData = getProductionLog(deviceId);
+    
+    // Reset sensor data when switching devices, but load persisted units
     setSensorData({
       vibration: null,
       pressure: null,
@@ -390,10 +436,13 @@ export default function App() {
       humidity: null,
       co2: null,
       airQuality: null,
-      units: null,
+      units: productionData.units, // Load from localStorage
       ventilation: null,
       machineControl: null
     });
+    
+    // Load production log for the new device
+    setProductionLog(productionLogData);
     
     setSelectedDevice(deviceId);
     localStorage.setItem('selectedDevice', deviceId);
@@ -477,6 +526,7 @@ export default function App() {
               oeeData={oeeData}
               factoryStatus={factoryStatus}
               controlMode={controlMode}
+              productionLog={productionLog}
             />
           )}
           {activeTab === 'settings' && (
@@ -501,6 +551,9 @@ export default function App() {
               setSelectedDevice={handleDeviceChange} 
               sensorHistory={sensorHistory}
               factoryStatus={factoryStatus}
+              targetUnits={targetUnits}
+              thresholds={thresholds}
+              currentUnits={sensorData.units}
             />
           )}
 

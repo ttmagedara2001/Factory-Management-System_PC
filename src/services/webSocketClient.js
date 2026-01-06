@@ -1,4 +1,9 @@
 import { Client } from "@stomp/stompjs";
+import {
+  incrementUnits,
+  addProductToLog,
+  getProductionData,
+} from "./productionService.js";
 
 // WebSocket URL from environment variables
 const WS_BASE_URL = import.meta.env.VITE_WS_URL;
@@ -260,25 +265,26 @@ class WebSocketClient {
 
   /**
    * Subscribe to device topics dynamically
+   * Uses the STOMP subscription pattern from reference implementation
    * @param {string} deviceId - Device ID to subscribe to
    */
   _subscribeToDeviceTopics(deviceId) {
     const self = this;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STOMP Topic Subscriptions - EXACT MQTT topic format for MQTTX
+    // STOMP Topic Subscriptions - Using /topic/ destination prefix
+    // Reference: STOMP protocol standard for pub/sub messaging
     // ═══════════════════════════════════════════════════════════════════════
 
-    // 1. Subscribe to protonest/{deviceId}/stream/fmc - receives all sensor data
-    // ✅ EXACT MQTT topic format - matches MQTTX subscription
-    const streamTopic = `protonest/${deviceId}/stream/fmc`;
+    // 1. Subscribe to /topic/stream/{deviceId} - receives all sensor data
+    const streamTopic = `/topic/stream/${deviceId}`;
     if (!this.subscriptions.has(`topic-stream-${deviceId}`)) {
       const streamSub = this.client.subscribe(streamTopic, (message) => {
         try {
           const rawData = JSON.parse(message.body);
           // ✅ Auto-add timestamp if not provided
           const data = normalizeMessageData(rawData);
-          console.log(`📡 [protonest/${deviceId}/stream/fmc] Received:`, data);
+          console.log(`📡 [${streamTopic}] Received:`, data);
 
           if (self.dataCallback && typeof data === "object") {
             // Handle individual sensor message: {"vibration": "8.5"}
@@ -302,19 +308,18 @@ class WebSocketClient {
         }
       });
       this.subscriptions.set(`topic-stream-${deviceId}`, streamSub);
-      console.log(`🔔 Subscribed to protonest/${deviceId}/stream/fmc`);
+      console.log(`🔔 Subscribed to ${streamTopic}`);
     }
 
-    // 2. Subscribe to protonest/{deviceId}/state - receives state/control data
-    // ✅ EXACT MQTT topic format - matches MQTTX subscription
-    const stateTopic = `protonest/${deviceId}/state`;
+    // 2. Subscribe to /topic/state/{deviceId} - receives state/control data
+    const stateTopic = `/topic/state/${deviceId}`;
     if (!this.subscriptions.has(`topic-state-${deviceId}`)) {
       const stateSub = this.client.subscribe(stateTopic, (message) => {
         try {
           const rawData = JSON.parse(message.body);
           // ✅ Auto-add timestamp if not provided
           const data = normalizeMessageData(rawData);
-          console.log(`📡 [protonest/${deviceId}/state] Received:`, data);
+          console.log(`📡 [${stateTopic}] Received:`, data);
 
           if (self.dataCallback && typeof data === "object") {
             Object.keys(data).forEach((key) => {
@@ -332,13 +337,12 @@ class WebSocketClient {
         }
       });
       this.subscriptions.set(`topic-state-${deviceId}`, stateSub);
-      console.log(`🔔 Subscribed to protonest/${deviceId}/state`);
+      console.log(`🔔 Subscribed to ${stateTopic}`);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Per-sensor STOMP topic subscriptions - EXACT MQTT topic format
-    // Format: protonest/{deviceId}/stream/fmc/{sensor}
-    // This matches the exact topic address that MQTTX publishes to
+    // Per-sensor STOMP topic subscriptions
+    // Format: /topic/protonest/{deviceId}/stream/fmc/{sensor}
     // ═══════════════════════════════════════════════════════════════════════
     const streamSensors = [
       "vibration",
@@ -351,8 +355,8 @@ class WebSocketClient {
     ];
 
     streamSensors.forEach((sensor) => {
-      // ✅ EXACT MQTT topic format - matches MQTTX subscription
-      const sensorTopic = `protonest/${deviceId}/stream/fmc/${sensor}`;
+      // STOMP-compatible topic format with /topic/ destination prefix
+      const sensorTopic = `/topic/protonest/${deviceId}/stream/fmc/${sensor}`;
       const subKey = `topic-sensor-${deviceId}-${sensor}`;
 
       if (!this.subscriptions.has(subKey)) {
@@ -385,17 +389,14 @@ class WebSocketClient {
           }
         });
         this.subscriptions.set(subKey, sensorSub);
-        console.log(
-          `🔔 Subscribed to protonest/${deviceId}/stream/fmc/${sensor}`
-        );
+        console.log(`🔔 Subscribed to ${sensorTopic}`);
       }
     });
 
-    // Subscribe to ventilation and machineControl state topics
-    // ✅ EXACT MQTT topic format - matches MQTTX subscription
+    // Subscribe to ventilation and machineControl state topics (STOMP format)
     const stateTypes = ["ventilation", "machineControl"];
     stateTypes.forEach((stateType) => {
-      const stateTypeTopic = `protonest/${deviceId}/state/fmc/${stateType}`;
+      const stateTypeTopic = `/topic/protonest/${deviceId}/state/fmc/${stateType}`;
       const subKey = `topic-state-${deviceId}-${stateType}`;
 
       if (!this.subscriptions.has(subKey)) {
@@ -422,11 +423,65 @@ class WebSocketClient {
           }
         });
         this.subscriptions.set(subKey, sub);
-        console.log(
-          `🔔 Subscribed to protonest/${deviceId}/state/fmc/${stateType}`
-        );
+        console.log(`🔔 Subscribed to ${stateTypeTopic}`);
       }
     });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Product Topic Subscription - Unit counting via product detection
+    // Format: /topic/protonest/{deviceId}/stream/fmc/product
+    // Payload: {"productID":"<id>","productName":"<name>"}
+    // Each message increments the unit count by 1
+    // ═══════════════════════════════════════════════════════════════════════
+    const productTopic = `/topic/protonest/${deviceId}/stream/fmc/product`;
+    const productSubKey = `topic-product-${deviceId}`;
+
+    if (!this.subscriptions.has(productSubKey)) {
+      const productSub = this.client.subscribe(productTopic, (message) => {
+        try {
+          const rawData = JSON.parse(message.body);
+          const data = normalizeMessageData(rawData);
+          console.log(`📦 [${productTopic}] Product Received:`, data);
+
+          // Extract product info from payload
+          const payload = data.payload || data;
+          const productID = payload.productID || payload.productId || "UNKNOWN";
+          const productName = payload.productName || "Unknown Product";
+
+          // Add product to log and increment units
+          const logEntry = addProductToLog(deviceId, {
+            productID,
+            productName,
+          });
+          const newUnitCount = incrementUnits(deviceId);
+
+          console.log(
+            `📊 [ProductionService] Unit count increased to: ${newUnitCount}`
+          );
+
+          // Notify callback with updated unit count
+          if (self.dataCallback) {
+            // Send product info
+            self.dataCallback({
+              sensorType: "product",
+              value: { productID, productName, logEntry },
+              timestamp: data.timestamp,
+            });
+
+            // Send updated unit count
+            self.dataCallback({
+              sensorType: "units",
+              value: newUnitCount,
+              timestamp: data.timestamp,
+            });
+          }
+        } catch (err) {
+          console.error(`❌ Error parsing product message:`, err, message.body);
+        }
+      });
+      this.subscriptions.set(productSubKey, productSub);
+      console.log(`🔔 Subscribed to ${productTopic} (Product Detection)`);
+    }
 
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log(`✅ Subscribed to all topics for device: ${deviceId}`);

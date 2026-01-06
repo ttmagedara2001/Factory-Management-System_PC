@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { History, Calendar, Download, Filter, Search, TrendingUp, AlertTriangle, Eye, EyeOff, X, Loader2, RefreshCw } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, CartesianGrid } from 'recharts';
+import { LineChart, Line, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, CartesianGrid, ReferenceLine } from 'recharts';
 import {
   fetchAllHistoricalData,
   getOEEChartData,
@@ -13,7 +13,18 @@ import {
 
 
 
-const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice, setSelectedDevice, sensorHistory = {}, factoryStatus = 'RUNNING' }) => {
+const HistoricalWindow = ({ 
+  alerts = [], 
+  setAlerts, 
+  devices = [], 
+  selectedDevice, 
+  setSelectedDevice, 
+  sensorHistory = {}, 
+  factoryStatus = 'RUNNING',
+  targetUnits = 1024,
+  thresholds = {},
+  currentUnits = 0
+}) => {
   const [dateRange, setDateRange] = useState('24h');
   const [granularity, setGranularity] = useState('hourly');
   const [searchTerm, setSearchTerm] = useState('');
@@ -392,7 +403,13 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
           </div>
         )}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <h3 className="text-sm font-bold text-slate-800 uppercase mb-4">Production Volume Trends</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase">Production Volume Trends</h3>
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-slate-500">Current: <span className="font-bold text-blue-600">{currentUnits || 0}</span></span>
+              <span className="text-slate-500">Target: <span className="font-bold text-green-600">{targetUnits}</span></span>
+            </div>
+          </div>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={productionData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -400,6 +417,7 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
               <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: '11px' }} />
+              <ReferenceLine y={targetUnits} stroke="#10B981" strokeDasharray="5 5" strokeWidth={2} label={{ value: `Target: ${targetUnits}`, fill: '#10B981', fontSize: 10, position: 'right' }} />
               <Bar dataKey="produced" fill="#3B82F6" name="Produced" />
               <Bar dataKey="target" fill="#94a3b8" name="Target" />
             </BarChart>
@@ -464,6 +482,13 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: '11px' }} />
+              {/* Threshold reference lines */}
+              {machineVisibility.vibration && thresholds.vibration?.critical && (
+                <ReferenceLine yAxisId="left" y={thresholds.vibration.critical} stroke="#EF4444" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Vib Critical: ${thresholds.vibration.critical}`, fill: '#EF4444', fontSize: 9, position: 'insideTopRight' }} />
+              )}
+              {machineVisibility.noise && thresholds.noise?.critical && (
+                <ReferenceLine yAxisId="right" y={thresholds.noise.critical} stroke="#F59E0B" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Noise: ${thresholds.noise.critical}dB`, fill: '#F59E0B', fontSize: 9, position: 'insideBottomRight' }} />
+              )}
               {machineVisibility.vibration && (
                 <Line yAxisId="left" type="monotone" dataKey="vibration" stroke="#A855F7" strokeWidth={2} dot={{ r: 3 }} name="Vibration (mm/s)" />
               )}
@@ -522,6 +547,16 @@ const HistoricalWindow = ({ alerts = [], setAlerts, devices = [], selectedDevice
               <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: '11px' }} />
+              {/* Threshold reference lines for environmental sensors */}
+              {envVisibility.temperature && thresholds.temperature?.max && (
+                <ReferenceLine y={thresholds.temperature.max} stroke="#EF4444" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Temp Max: ${thresholds.temperature.max}°C`, fill: '#EF4444', fontSize: 9, position: 'insideTopRight' }} />
+              )}
+              {envVisibility.humidity && thresholds.humidity?.max && (
+                <ReferenceLine y={thresholds.humidity.max} stroke="#3B82F6" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Hum Max: ${thresholds.humidity.max}%`, fill: '#3B82F6', fontSize: 9, position: 'insideBottomRight' }} />
+              )}
+              {envVisibility.co2 && thresholds.co2?.max && (
+                <ReferenceLine y={thresholds.co2.max} stroke="#EC4899" strokeDasharray="5 5" strokeWidth={1} label={{ value: `CO2 Max: ${thresholds.co2.max}`, fill: '#EC4899', fontSize: 9, position: 'insideTopLeft' }} />
+              )}
               {envVisibility.temperature && (
                 <Line type="monotone" dataKey="temperature" stroke="#10B981" strokeWidth={2} dot={{ r: 3 }} name="Temperature (°C)" />
               )}
