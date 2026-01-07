@@ -393,95 +393,88 @@ const HistoricalWindow = ({
       )}
 
       {/* Production Volume & OEE Trends */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 relative">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 relative">
         {isLoading && (
           <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-xl">
-            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg shadow-sm border border-slate-200">
-              <Loader2 className="animate-spin text-blue-500" size={18} />
-              <span className="text-xs sm:text-sm font-medium text-slate-600">Loading...</span>
+            <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200">
+              <Loader2 className="animate-spin text-blue-500" size={20} />
+              <span className="text-sm font-medium text-slate-600">Loading data...</span>
             </div>
           </div>
         )}
-        <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 mb-4">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-800 uppercase">Production Volume</h3>
-            <div className="flex items-center gap-3 sm:gap-4 text-[10px] sm:text-xs">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase">Production Volume Trends</h3>
+            <div className="flex items-center gap-4 text-xs">
               <span className="text-slate-500">Current: <span className="font-bold text-blue-600">{currentUnits || 0}</span></span>
               <span className="text-slate-500">Target: <span className="font-bold text-green-600">{targetUnits}</span></span>
             </div>
           </div>
-          <div className="chart-responsive">
-          <ResponsiveContainer width="100%" height={200} minWidth={0}>
-            <BarChart data={productionData} margin={{ top: 5, right: 5, left: -15, bottom: 5 }}>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={productionData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} interval="preserveStartEnd" />
-              <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} width={35} />
-              <Tooltip contentStyle={{ fontSize: '11px' }} />
-              <Legend wrapperStyle={{ fontSize: '10px' }} />
-              <ReferenceLine y={targetUnits} stroke="#10B981" strokeDasharray="5 5" strokeWidth={2} label={{ value: `Target`, fill: '#10B981', fontSize: 9, position: 'insideTopRight' }} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
+              <Tooltip />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+              <ReferenceLine y={targetUnits} stroke="#10B981" strokeDasharray="5 5" strokeWidth={2} label={{ value: `Target: ${targetUnits}`, fill: '#10B981', fontSize: 10, position: 'right' }} />
               <Bar dataKey="produced" fill="#3B82F6" name="Produced" />
               <Bar dataKey="target" fill="#94a3b8" name="Target" />
             </BarChart>
           </ResponsiveContainer>
-          </div>
         </div>
 
-        <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-slate-100">
-          <h3 className="text-xs sm:text-sm font-bold text-slate-800 uppercase mb-4">OEE Trends</h3>
-          <div className="chart-responsive">
-          <ResponsiveContainer width="100%" height={200} minWidth={0}>
-            <LineChart data={oeeData} margin={{ top: 5, right: 5, left: -15, bottom: 5 }}>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+          <h3 className="text-sm font-bold text-slate-800 uppercase mb-4">OEE Trends (Weekly)</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={oeeData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="week" tick={{ fontSize: 9, fill: '#94a3b8' }} interval="preserveStartEnd" />
-              <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} domain={[0, 100]} width={35} />
-              <Tooltip contentStyle={{ fontSize: '11px' }} />
-              <Line type="monotone" dataKey="oee" stroke="#10B981" strokeWidth={2} dot={{ r: 3 }} name="OEE %" />
+              <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} domain={[0, 100]} />
+              <Tooltip />
+              <Line type="monotone" dataKey="oee" stroke="#10B981" strokeWidth={3} dot={{ r: 4 }} name="OEE %" />
             </LineChart>
           </ResponsiveContainer>
-          </div>
-          <div className="mt-3 sm:mt-4 flex items-center gap-2 text-[10px] sm:text-xs">
-            <TrendingUp size={14} className="sm:w-4 sm:h-4 text-green-500" />
-            <span className="font-semibold text-slate-600">MTBF: <span className="text-green-600">{mtbfHours > 0 ? `${mtbfHours}h` : '0h'}</span></span>
+          <div className="mt-4 flex items-center gap-2 text-xs">
+            <TrendingUp size={16} className="text-green-500" />
+            <span className="font-semibold text-slate-600">MTBF (Mean Time Between Failures): <span className="text-green-600">{mtbfHours > 0 ? `${mtbfHours} hours` : '0 hours (collecting data...)'}</span></span>
           </div>
         </div>
       </div>
 
       {/* Machine Performance & Environmental Trends */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-800 uppercase">Machine Performance Trends</h3>
-            <div className="flex flex-wrap gap-1 sm:gap-2">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase">Machine Performance Trends</h3>
+            <div className="flex gap-2">
               <button
                 onClick={() => toggleMachineMetric('vibration')}
-                className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded text-[10px] sm:text-xs font-semibold transition-colors ${machineVisibility.vibration ? 'bg-purple-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${machineVisibility.vibration ? 'bg-purple-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {machineVisibility.vibration ? <Eye size={12} className="sm:w-[14px] sm:h-[14px]" /> : <EyeOff size={12} className="sm:w-[14px] sm:h-[14px]" />}
-                <span className="hidden xs:inline">Vibration</span>
-                <span className="xs:hidden">Vib</span>
+                {machineVisibility.vibration ? <Eye size={14} /> : <EyeOff size={14} />}
+                Vibration
               </button>
               <button
                 onClick={() => toggleMachineMetric('pressure')}
-                className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded text-[10px] sm:text-xs font-semibold transition-colors ${machineVisibility.pressure ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${machineVisibility.pressure ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {machineVisibility.pressure ? <Eye size={12} className="sm:w-[14px] sm:h-[14px]" /> : <EyeOff size={12} className="sm:w-[14px] sm:h-[14px]" />}
-                <span className="hidden xs:inline">Pressure</span>
-                <span className="xs:hidden">Pres</span>
+                {machineVisibility.pressure ? <Eye size={14} /> : <EyeOff size={14} />}
+                Pressure
               </button>
               <button
                 onClick={() => toggleMachineMetric('noise')}
-                className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded text-[10px] sm:text-xs font-semibold transition-colors ${machineVisibility.noise ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${machineVisibility.noise ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {machineVisibility.noise ? <Eye size={12} className="sm:w-[14px] sm:h-[14px]" /> : <EyeOff size={12} className="sm:w-[14px] sm:h-[14px]" />}
+                {machineVisibility.noise ? <Eye size={14} /> : <EyeOff size={14} />}
                 Noise
               </button>
             </div>
           </div>
-          <div className="chart-responsive">
-          <ResponsiveContainer width="100%" height={250} minWidth={0}>
+          <ResponsiveContainer width="100%" height={300}>
             <LineChart data={machinePerformanceData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#94a3b8' }} />
@@ -507,50 +500,47 @@ const HistoricalWindow = ({
               )}
             </LineChart>
           </ResponsiveContainer>
-          </div>
         </div>
 
-        <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-4">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-800 uppercase">Environmental Trends</h3>
-            <div className="flex flex-wrap gap-1 sm:gap-2">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase">Environmental Trends</h3>
+            <div className="flex gap-2">
               <button
                 onClick={() => toggleEnvMetric('temperature')}
-                className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded text-[10px] sm:text-xs font-semibold transition-colors ${envVisibility.temperature ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${envVisibility.temperature ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {envVisibility.temperature ? <Eye size={12} className="sm:w-[14px] sm:h-[14px]" /> : <EyeOff size={12} className="sm:w-[14px] sm:h-[14px]" />}
+                {envVisibility.temperature ? <Eye size={14} /> : <EyeOff size={14} />}
                 Temp
               </button>
               <button
                 onClick={() => toggleEnvMetric('humidity')}
-                className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded text-[10px] sm:text-xs font-semibold transition-colors ${envVisibility.humidity ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${envVisibility.humidity ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {envVisibility.humidity ? <Eye size={12} className="sm:w-[14px] sm:h-[14px]" /> : <EyeOff size={12} className="sm:w-[14px] sm:h-[14px]" />}
-                <span className="hidden xs:inline">Humidity</span>
-                <span className="xs:hidden">Hum</span>
+                {envVisibility.humidity ? <Eye size={14} /> : <EyeOff size={14} />}
+                Humidity
               </button>
               <button
                 onClick={() => toggleEnvMetric('co2')}
-                className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded text-[10px] sm:text-xs font-semibold transition-colors ${envVisibility.co2 ? 'bg-pink-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${envVisibility.co2 ? 'bg-pink-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {envVisibility.co2 ? <Eye size={12} className="sm:w-[14px] sm:h-[14px]" /> : <EyeOff size={12} className="sm:w-[14px] sm:h-[14px]" />}
+                {envVisibility.co2 ? <Eye size={14} /> : <EyeOff size={14} />}
                 CO2
               </button>
               <button
                 onClick={() => toggleEnvMetric('aqi')}
-                className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded text-[10px] sm:text-xs font-semibold transition-colors ${envVisibility.aqi ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${envVisibility.aqi ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {envVisibility.aqi ? <Eye size={12} className="sm:w-[14px] sm:h-[14px]" /> : <EyeOff size={12} className="sm:w-[14px] sm:h-[14px]" />}
+                {envVisibility.aqi ? <Eye size={14} /> : <EyeOff size={14} />}
                 AQI
               </button>
             </div>
           </div>
-          <div className="chart-responsive">
-          <ResponsiveContainer width="100%" height={200} minWidth={0}>
+          <ResponsiveContainer width="100%" height={250}>
             <LineChart data={environmentalData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#94a3b8' }} />
@@ -581,19 +571,17 @@ const HistoricalWindow = ({
               )}
             </LineChart>
           </ResponsiveContainer>
-          </div>
         </div>
       </div>
 
       {/* Downtime Analysis & Event Log */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
-        <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-slate-100">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle size={16} className="sm:w-5 sm:h-5 text-yellow-600" />
-            <h3 className="text-xs sm:text-sm font-bold text-slate-800 uppercase">Downtime Causes (Pareto)</h3>
+            <AlertTriangle size={20} className="text-yellow-600" />
+            <h3 className="text-sm font-bold text-slate-800 uppercase">Downtime Causes (Pareto Analysis)</h3>
           </div>
-          <div className="chart-responsive">
-          <ResponsiveContainer width="100%" height={200} minWidth={0}>
+          <ResponsiveContainer width="100%" height={250}>
             <BarChart data={downtimeData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} />
@@ -602,31 +590,30 @@ const HistoricalWindow = ({
               <Bar dataKey="occurrences" fill="#EF4444" name="Occurrences" />
             </BarChart>
           </ResponsiveContainer>
-          </div>
         </div>
 
-        <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-800 uppercase">Event Log</h3>
-            <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2">
-              <div className="relative flex-1 xs:flex-none">
-                <Search size={14} className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-slate-400" />
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase">Detailed Event Log</h3>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder="Search events..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full xs:w-auto pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="flex items-center gap-2">
-                <Filter size={14} className="text-slate-600 hidden xs:block" />
+                <Filter size={16} className="text-slate-600" />
                 <select
                   value={severityFilter}
                   onChange={(e) => setSeverityFilter(e.target.value)}
-                  className="flex-1 xs:flex-none px-2 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="all">All</option>
+                  <option value="all">All Severities</option>
                   <option value="Critical">Critical</option>
                   <option value="Warning">Warning</option>
                   <option value="Info">Info</option>

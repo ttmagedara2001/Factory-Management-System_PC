@@ -207,30 +207,30 @@ const Dashboard = ({
 
           {/* Production Log */}
           <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-100">
-            <h3 className="text-[10px] font-bold text-slate-800 uppercase p-3 sm:p-4 pb-2 text-center">Recent Production Log</h3>
-            <div className="overflow-y-auto max-h-[300px] sm:max-h-[500px]">
-              <table className="w-full text-left text-[10px] sm:text-xs">
+            <h3 className="text-[10px] font-bold text-slate-800 uppercase p-4 pb-2 text-center">Recent Production Log</h3>
+            <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+              <table className="w-full text-left text-xs">
                 <thead className="bg-[#D1D5DB] text-slate-700 font-bold uppercase sticky top-0">
                   <tr>
-                    <th className="p-1.5 sm:p-2 pl-2 sm:pl-3">Date</th>
-                    <th className="p-1.5 sm:p-2">Time</th>
-                    <th className="p-1.5 sm:p-2">Tag ID</th>
-                    <th className="p-1.5 sm:p-2 hidden xs:table-cell">Product</th>
+                    <th className="p-2 pl-3">Date</th>
+                    <th className="p-2">Time</th>
+                    <th className="p-2">Tag ID</th>
+                    <th className="p-2">Product Name</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {productionLog && productionLog.length > 0 ? (
                     [...productionLog].reverse().map((entry, index) => (
                       <tr key={entry.id || index} className="hover:bg-slate-50">
-                        <td className="p-1.5 sm:p-2 pl-2 sm:pl-3 text-slate-600">{entry.date}</td>
-                        <td className="p-1.5 sm:p-2 text-slate-600">{entry.time}</td>
-                        <td className="p-1.5 sm:p-2 font-mono text-blue-600 truncate max-w-[80px] sm:max-w-none">{entry.productID}</td>
-                        <td className="p-1.5 sm:p-2 text-slate-800 hidden xs:table-cell">{entry.productName}</td>
+                        <td className="p-2 pl-3 text-slate-600">{entry.date}</td>
+                        <td className="p-2 text-slate-600">{entry.time}</td>
+                        <td className="p-2 font-mono text-blue-600">{entry.productID}</td>
+                        <td className="p-2 text-slate-800">{entry.productName}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="4" className="p-3 sm:p-4 text-center text-slate-400 text-[10px] sm:text-xs">
+                      <td colSpan="4" className="p-4 text-center text-slate-400 text-xs">
                         Waiting for production data...
                       </td>
                     </tr>
@@ -243,22 +243,22 @@ const Dashboard = ({
           {/* Active Alerts (only for selected device, filtered in App.jsx) */}
           <div
             id="active-alerts"
-            className={`bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-100 transition-all duration-500 ${bellClicked ? 'ring-4 ring-yellow-400 ring-opacity-75 shadow-2xl shadow-yellow-200' : ''
+            className={`bg-white p-6 rounded-xl shadow-sm border border-slate-100 transition-all duration-500 ${bellClicked ? 'ring-4 ring-yellow-400 ring-opacity-75 shadow-2xl shadow-yellow-200' : ''
               }`}
           >
-            <h3 className="text-[10px] font-bold text-slate-800 uppercase mb-3 sm:mb-4">Active Alerts</h3>
-            <div className="space-y-2 sm:space-y-3 max-h-[250px] sm:max-h-none overflow-y-auto">
+            <h3 className="text-[10px] font-bold text-slate-800 uppercase mb-4">Active Alerts</h3>
+            <div className="space-y-3">
               {alerts && alerts.length > 0 ? (
                 alerts.slice(0, 5).map((alert, i) => (
-                  <div key={i} className={`flex justify-between items-start p-2 sm:p-3 rounded-md border-l-4 ${alert.severity === 'critical' ? 'bg-red-50 border-red-500' : alert.severity === 'warning' ? 'bg-yellow-50 border-yellow-500' : 'bg-[#FEF3C7] border-[#FBBF24]'}`}>
-                    <p className={`text-[9px] sm:text-[10px] font-bold leading-tight w-3/4 ${alert.severity === 'critical' ? 'text-red-900' : alert.severity === 'warning' ? 'text-yellow-900' : 'text-slate-700'}`}>
+                  <div key={i} className={`flex justify-between items-start p-3 rounded-md border-l-4 ${alert.severity === 'critical' ? 'bg-red-50 border-red-500' : alert.severity === 'warning' ? 'bg-yellow-50 border-yellow-500' : 'bg-[#FEF3C7] border-[#FBBF24]'}`}>
+                    <p className={`text-[10px] font-bold leading-tight w-3/4 ${alert.severity === 'critical' ? 'text-red-900' : alert.severity === 'warning' ? 'text-yellow-900' : 'text-slate-700'}`}>
                       {alert.msg}
                     </p>
-                    <span className={`text-[9px] sm:text-[10px] font-bold ${alert.severity === 'critical' ? 'text-red-600' : alert.severity === 'warning' ? 'text-yellow-600' : 'text-slate-500'}`}>{alert.time}</span>
+                    <span className={`text-[10px] font-bold ${alert.severity === 'critical' ? 'text-red-600' : alert.severity === 'warning' ? 'text-yellow-600' : 'text-slate-500'}`}>{alert.time}</span>
                   </div>
                 ))
               ) : (
-                <div className="text-[10px] sm:text-xs text-slate-400 text-center">No active alerts</div>
+                <div className="text-xs text-slate-400 text-center">No active alerts</div>
               )}
             </div>
           </div>

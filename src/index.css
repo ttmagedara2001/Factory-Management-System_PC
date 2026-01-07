@@ -7,13 +7,6 @@
     padding: 0;
     box-sizing: border-box;
   }
-  
-  /* Prevent horizontal scroll on mobile */
-  html, body {
-    overflow-x: hidden;
-    width: 100%;
-    max-width: 100vw;
-  }
 }
 
 body {
@@ -23,59 +16,6 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #f3f4f6;
-}
-
-/* Mobile-first responsive utilities */
-@layer utilities {
-  /* Safe area padding for notched devices */
-  .safe-area-inset {
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  
-  /* Responsive chart container - prevents horizontal scroll */
-  .chart-responsive {
-    width: 100%;
-    min-width: 0;
-    overflow: hidden;
-  }
-  
-  /* Touch-friendly tap targets */
-  .touch-target {
-    min-height: 44px;
-    min-width: 44px;
-  }
-  
-  /* Hide scrollbar but keep functionality */
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-  
-  /* Landscape orientation utilities */
-  @media (orientation: landscape) and (max-height: 500px) {
-    .landscape-compact {
-      padding-top: 0.5rem !important;
-      padding-bottom: 0.5rem !important;
-    }
-    .landscape-hide {
-      display: none !important;
-    }
-  }
-  
-  /* Portrait orientation utilities */
-  @media (orientation: portrait) {
-    .portrait-stack {
-      flex-direction: column !important;
-    }
-    .portrait-full {
-      width: 100% !important;
-    }
-  }
 }
 
 /* Custom Tab Styles for the specific yellow color from the design */
@@ -135,50 +75,6 @@ body {
   font-size: 14px;
 }
 
-/* Recharts responsive overrides */
-.recharts-wrapper {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-.recharts-surface {
-  overflow: visible;
-}
-
-/* Mobile chart legend */
-@media (max-width: 640px) {
-  .recharts-legend-wrapper {
-    position: relative !important;
-    width: 100% !important;
-    margin-top: 0.5rem;
-  }
-  
-  .recharts-legend-item {
-    margin-right: 8px !important;
-  }
-  
-  .recharts-legend-item-text {
-    font-size: 10px !important;
-  }
-  
-  /* Smaller axis labels on mobile */
-  .recharts-cartesian-axis-tick-value {
-    font-size: 8px !important;
-  }
-  
-  /* Hide some reference line labels on mobile */
-  .recharts-reference-line text {
-    font-size: 7px !important;
-  }
-}
-
-/* Landscape mode chart adjustments */
-@media (orientation: landscape) and (max-height: 500px) {
-  .recharts-wrapper {
-    max-height: 180px !important;
-  }
-}
-
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
@@ -201,12 +97,4 @@ code {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
-}
-
-/* Mobile scrollbar - thinner */
-@media (max-width: 640px) {
-  ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
 }
