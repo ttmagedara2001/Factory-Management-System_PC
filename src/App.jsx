@@ -35,6 +35,7 @@ export default function App() {
     { id: 'device0011233', name: 'Machine B - Line 2' },
     { id: 'device7654', name: 'Machine C - Line 3' },
     { id: 'device3421', name: 'Machine D - Line 4' },
+    {id: 'deviceTestUC', name: 'Machine E - Line 5' }
   ]);
 
   // Real-time sensor data from MQTT

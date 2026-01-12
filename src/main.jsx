@@ -8,8 +8,8 @@ import { login } from "./services/authService.js";
 
 // ✅ Auto-login credentials from environment variables
 // Set these in .env file (see .env.example for template)
-const email = import.meta.env.VITE_AUTH_EMAIL || "";
-const password = import.meta.env.VITE_AUTH_SECRET_KEY || ""; // This is the secretKey from Protonest dashboard
+const email = import.meta.env.VITE_AUTH_EMAIL ;
+const password = import.meta.env.VITE_AUTH_SECRET_KEY ; // This is the secretKey from Protonest dashboard
 
 const AutoLogin = ({ children }) => {
   const { setAuth } = useAuth();
