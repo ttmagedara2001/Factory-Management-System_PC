@@ -23,22 +23,22 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 15000, // 15 second timeout
+  timeout: 15000,
+  // ✅ Use HttpOnly cookies for authentication
+  withCredentials: true,
 });
 
-// Request Interceptor: Adds X-Token header if available
+// Request Interceptor: Adds cookies automatically (withCredentials: true)
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("jwtToken");
-    if (token && token !== "MOCK_TOKEN_FOR_TESTING") {
-      config.headers["X-Token"] = token;
-    }
+    // Note: X-Token header removed - using HttpOnly cookies instead
+    // Cookies are sent automatically with withCredentials: true
 
     console.log("📤 API Request:", {
       method: config.method?.toUpperCase(),
       url: config.url,
       baseURL: config.baseURL,
-      hasToken: !!token && token !== "MOCK_TOKEN_FOR_TESTING",
+      withCredentials: config.withCredentials,
       payload: config.data || undefined,
     });
 
@@ -50,7 +50,7 @@ api.interceptors.request.use(
   }
 );
 
-// Response Interceptor: Handles Token Refresh and various errors
+// Response Interceptor: Handles Token Refresh (cookie-based) and various errors
 api.interceptors.response.use(
   (response) => {
     console.log("📥 API Response:", {
@@ -65,7 +65,6 @@ api.interceptors.response.use(
 
     // Log API errors for debugging (suppress repetitive 400 errors)
     if (error.response) {
-      // Only log detailed errors for non-400 or first-time 400 errors
       const is400Error = error.response.status === 400;
       const errorData =
         error.response.data?.data || error.response.data?.message;
@@ -98,20 +97,15 @@ api.interceptors.response.use(
         if (errorData === "Device does not belong to the user") {
           if (!window.__deviceAuthErrorShown) {
             console.error("\n🚫 DEVICE AUTHORIZATION ERROR");
-            console.error(
-              "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            );
+            console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             console.error("❌ Device does not belong to your account");
             console.error("\n💡 TO FIX THIS:");
             console.error("   1. Go to: https://api.protonestconnect.co");
             console.error("   2. Find your device ID in your dashboard");
             console.error("   3. Update 'defaultDeviceId' in Dashboard.jsx\n");
-            console.error(
-              "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            );
+            console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
             window.__deviceAuthErrorShown = true;
           }
-          // Silent return for subsequent auth errors
           return Promise.reject(error);
         }
 
@@ -133,14 +127,13 @@ api.interceptors.response.use(
         allowed: error.response.headers?.allow || "Not specified",
       });
 
-      // Don't retry 405 errors - they need code changes
       return Promise.reject(error);
     }
 
-    // Handle token refresh for 400/401 errors (but not for auth endpoints)
+    // Handle token refresh for 400/401 "Invalid token" errors (cookie-based refresh)
     if (
       (error.response?.status === 400 || error.response?.status === 401) &&
-      !originalRequest?.url?.includes("/get-token") && // Don't try refresh on login endpoints
+      !originalRequest?.url?.includes("/get-token") &&
       (error.response?.data?.data === "Invalid token" ||
         error.response?.data?.message?.includes("token")) &&
       !originalRequest._retry
@@ -148,30 +141,23 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem("refreshToken");
-        if (!refreshToken) throw new Error("No refresh token available");
+        console.log("🔄 Attempting cookie-based token refresh...");
 
-        console.log("🔄 Attempting token refresh...");
-
-        const response = await axios.post(
-          `${BASE_URL}/get-new-token`,
-          {},
-          {
-            headers: { "X-Refresh-Token": refreshToken },
-            timeout: 10000,
-          }
-        );
+        // Cookie-based token refresh: GET /user/get-new-token
+        // Server reads refresh token from HttpOnly cookie and sets new JWT cookie
+        const response = await axios.get(`${BASE_URL}/user/get-new-token`, {
+          withCredentials: true,
+          timeout: 10000,
+        });
 
         if (response.data.status === "Success") {
-          const { jwtToken } = response.data.data;
-          localStorage.setItem("jwtToken", jwtToken);
-          originalRequest.headers["X-Token"] = jwtToken;
-
-          console.log("✅ Token refreshed successfully");
+          console.log("✅ Token refreshed successfully (cookie updated)");
+          // Retry original request - new token is in cookie
           return api(originalRequest);
         }
       } catch (refreshError) {
         console.error("❌ Token refresh failed:", refreshError.message);
+        // Clear any local state and redirect to login
         localStorage.clear();
         window.location.href = "/";
       }

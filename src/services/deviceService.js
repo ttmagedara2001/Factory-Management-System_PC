@@ -92,7 +92,7 @@ export const getStreamDataForDevice = async (
     );
     console.log(`⏰ [HTTP API] Time range: ${startTime} to ${endTime}`);
 
-    const response = await api.post("/get-stream-data/device", {
+    const response = await api.post("/user/get-stream-data/device", {
       deviceId,
       startTime,
       endTime,
@@ -118,7 +118,7 @@ export const getStreamDataForDevice = async (
       status: error.response?.status,
       statusText: error.response?.statusText,
       message: error.message,
-      endpoint: "/get-stream-data/device",
+      endpoint: "/user/get-stream-data/device",
     });
     throw error;
   }
@@ -152,7 +152,7 @@ export const getStateDetailsForDevice = async (deviceId) => {
   try {
     console.log(`🎛️ [HTTP API] Fetching state details for ${deviceId}`);
 
-    const response = await api.post("/get-state-details/device", {
+    const response = await api.post("/user/get-state-details/device", {
       deviceId,
     });
 
@@ -171,7 +171,7 @@ export const getStateDetailsForDevice = async (deviceId) => {
         status: error.response?.status,
         statusText: error.response?.statusText,
         message: error.message,
-        endpoint: "/get-state-details/device",
+        endpoint: "/user/get-state-details/device",
       }
     );
     throw error;
@@ -216,7 +216,7 @@ export const updateStateDetails = async (deviceId, topic, payload) => {
       payload
     );
 
-    const response = await api.post("/update-state-details", {
+    const response = await api.post("/user/update-state-details", {
       deviceId,
       topic: formattedTopic,
       payload,
@@ -236,7 +236,7 @@ export const updateStateDetails = async (deviceId, topic, payload) => {
         status: error.response?.status,
         statusText: error.response?.statusText,
         message: error.message,
-        endpoint: "/update-state-details",
+        endpoint: "/user/update-state-details",
         payload: payload,
       }
     );
@@ -303,7 +303,7 @@ export const getStreamDataByTopic = async (
     );
     console.log(`⏰ [HTTP API] Time range: ${startTime} to ${endTime}`);
 
-    const response = await api.post("/get-stream-data/device/topic", {
+    const response = await api.post("/user/get-stream-data/device/topic", {
       deviceId,
       topic: formattedTopic,
       startTime,
@@ -335,7 +335,7 @@ export const getStreamDataByTopic = async (
         status: error.response?.status,
         statusText: error.response?.statusText,
         message: error.message,
-        endpoint: "/get-stream-data/device/topic",
+        endpoint: "/user/get-stream-data/device/topic",
       }
     );
     throw error;
@@ -380,7 +380,7 @@ export const getStateDetailsByTopic = async (deviceId, topic) => {
       `🎛️ [HTTP API] Fetching ${formattedTopic} state for ${deviceId}`
     );
 
-    const response = await api.post("/get-state-details/device/topic", {
+    const response = await api.post("/user/get-state-details/device/topic", {
       deviceId,
       topic: formattedTopic,
     });
@@ -400,7 +400,7 @@ export const getStateDetailsByTopic = async (deviceId, topic) => {
         status: error.response?.status,
         statusText: error.response?.statusText,
         message: error.message,
-        endpoint: "/get-state-details/device/topic",
+        endpoint: "/user/get-state-details/device/topic",
       }
     );
     throw error;
@@ -425,7 +425,7 @@ export const getCurrentUnitsFromBackend = async (deviceId) => {
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
 
-    const response = await api.post("/get-stream-data/device/topic", {
+    const response = await api.post("/user/get-stream-data/device/topic", {
       deviceId,
       topic: "fmc/units", // Correct MQTT suffix format
       startTime: startOfDay.toISOString(),

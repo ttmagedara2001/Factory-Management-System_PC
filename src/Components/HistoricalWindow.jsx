@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { History, Calendar, Download, Filter, Search, TrendingUp, AlertTriangle, Eye, EyeOff, X, Loader2, RefreshCw } from 'lucide-react';
+import { History, Calendar, Download, Filter, Search, TrendingUp, AlertTriangle, Eye, EyeOff, X, Loader2, RefreshCw, Clock, Database, Activity } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, CartesianGrid, ReferenceLine } from 'recharts';
 import {
   fetchAllHistoricalData,
@@ -13,17 +13,18 @@ import {
 
 
 
-const HistoricalWindow = ({ 
-  alerts = [], 
-  setAlerts, 
-  devices = [], 
-  selectedDevice, 
-  setSelectedDevice, 
-  sensorHistory = {}, 
+const HistoricalWindow = ({
+  alerts = [],
+  setAlerts,
+  devices = [],
+  selectedDevice,
+  setSelectedDevice,
+  sensorHistory = {},
   factoryStatus = 'RUNNING',
   targetUnits = 1024,
   thresholds = {},
-  currentUnits = 0
+  currentUnits = 0,
+  hideTitle = false // New prop for embedding in larger layouts
 }) => {
   const [dateRange, setDateRange] = useState('24h');
   const [granularity, setGranularity] = useState('hourly');
@@ -45,12 +46,11 @@ const HistoricalWindow = ({
     eventLog: true
   });
 
-  // Environmental metrics visibility state
+  // Environmental metrics visibility state (AQI is calculated, not graphed)
   const [envVisibility, setEnvVisibility] = useState({
     temperature: true,
     humidity: true,
-    co2: true,
-    aqi: true
+    co2: true
   });
 
   // Machine performance metrics visibility state
@@ -98,10 +98,50 @@ const HistoricalWindow = ({
       // Fetch all data using the historical data service
       const result = await fetchAllHistoricalData(selectedDevice, dateRange);
 
-      // Update state with HTTP data
-      setProductionData(result.productionData || []);
-      setMachinePerformanceData(result.machinePerformanceData || []);
-      setEnvironmentalData(result.environmentalData || []);
+      // Production data - use API data or create fallback from current values
+      let prodData = result.productionData || [];
+      if (prodData.length === 0 && currentUnits !== undefined && currentUnits !== null) {
+        // Create a single data point from current real-time value
+        const today = new Date().toISOString().split('T')[0];
+        prodData = [{ date: today, produced: currentUnits, target: targetUnits }];
+        console.log(`📊 [Historical] Using current units as fallback: ${currentUnits}`);
+      }
+      setProductionData(prodData);
+
+      // Machine performance data - use API data or create fallback
+      let machineData = result.machinePerformanceData || [];
+      if (machineData.length === 0 && sensorHistory && sensorHistory[selectedDevice]) {
+        const deviceHistory = sensorHistory[selectedDevice];
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        machineData = [{
+          time: timeStr,
+          timestamp: now.toISOString(),
+          vibration: deviceHistory.vibration?.[0]?.value || null,
+          pressure: deviceHistory.pressure?.[0]?.value || null,
+          noise: deviceHistory.noise?.[0]?.value || null,
+        }];
+      }
+      setMachinePerformanceData(machineData);
+
+      // Environmental data - use API data or create fallback (AQI is calculated, not graphed)
+      let envData = result.environmentalData || [];
+      if (envData.length === 0 && sensorHistory && sensorHistory[selectedDevice]) {
+        const deviceHistory = sensorHistory[selectedDevice];
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        envData = [{
+          time: timeStr,
+          timestamp: now.toISOString(),
+          temperature: deviceHistory.temperature?.[0]?.value || null,
+          humidity: deviceHistory.humidity?.[0]?.value || null,
+          co2: deviceHistory.co2?.[0]?.value || null,
+          // AQI removed - calculated client-side, not graphed
+        }];
+      }
+      setEnvironmentalData(envData);
 
       // OEE and Downtime from localStorage (calculated locally)
       setOeeData(result.oeeData || [{ week: new Date().toISOString().split('T')[0], oee: 0 }]);
@@ -109,14 +149,20 @@ const HistoricalWindow = ({
       setMtbfHours(result.mtbf || 0);
 
       setLastUpdated(new Date());
-      console.log(`✅ [Historical] Data loaded successfully`);
+      console.log(`✅ [Historical] Data loaded successfully. Production: ${prodData.length}, Machine: ${machineData.length}, Env: ${envData.length}`);
     } catch (error) {
       console.error(`❌ [Historical] Error loading data:`, error);
       setDataError(error.message || 'Failed to load historical data');
+
+      // On error, still try to show current data
+      if (currentUnits !== undefined && currentUnits !== null) {
+        const today = new Date().toISOString().split('T')[0];
+        setProductionData([{ date: today, produced: currentUnits, target: targetUnits }]);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [selectedDevice, dateRange]);
+  }, [selectedDevice, dateRange, currentUnits, targetUnits, sensorHistory]);
 
   // Initial load and periodic refresh
   useEffect(() => {
@@ -265,37 +311,81 @@ const HistoricalWindow = ({
     return matchesSearch && matchesSeverity;
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PILL BADGE COMPONENT - Compact metadata display
+  // ═══════════════════════════════════════════════════════════════════════════
+  const PillBadge = ({ icon: Icon, label, value, color = 'blue' }) => {
+    const colorClasses = {
+      blue: 'bg-blue-50 text-blue-700 border-blue-200',
+      green: 'bg-green-50 text-green-700 border-green-200',
+      purple: 'bg-purple-50 text-purple-700 border-purple-200',
+      amber: 'bg-amber-50 text-amber-700 border-amber-200',
+    };
+
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${colorClasses[color]}`}>
+        {Icon && <Icon size={10} />}
+        <span className="text-slate-500">{label}:</span>
+        <span className="font-semibold">{value}</span>
+      </span>
+    );
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION HEADER COMPONENT - Consistent iconography style
+  // ═══════════════════════════════════════════════════════════════════════════
+  const SectionHeader = ({ icon: Icon, title, iconColor = 'text-primary-600', children }) => (
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-2">
+        <div className="p-1.5 bg-blue-50 rounded-lg">
+          <Icon size={16} className={iconColor} />
+        </div>
+        <h3 className="text-sm font-bold text-slate-800 uppercase">{title}</h3>
+      </div>
+      {children}
+    </div>
+  );
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <History size={24} className="text-slate-600" />
-          <h1 className="text-lg sm:text-xl font-bold text-slate-800 uppercase tracking-wide">Historical Data</h1>
-          <button
-            onClick={loadHistoricalData}
-            disabled={isLoading}
-            className="p-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
-            title="Refresh data"
-          >
-            {isLoading ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <RefreshCw size={16} />
-            )}
-          </button>
+      {/* Header - Conditionally hidden via hideTitle prop */}
+      {!hideTitle && (
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 sm:mb-10">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 rounded-xl">
+              <History size={24} className="text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold text-slate-800 uppercase tracking-wide">Historical Data</h1>
+              <p className="text-xs text-slate-500 mt-0.5">Analyze trends and patterns over time</p>
+            </div>
+            <button
+              onClick={loadHistoricalData}
+              disabled={isLoading}
+              className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
+              title="Refresh data"
+            >
+              {isLoading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RefreshCw size={16} />
+              )}
+            </button>
+          </div>
         </div>
+      )}
 
-      </div>
-
-      {/* Time Range & Interval Controls */}
-      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-100 mb-6">
+      {/* Time Range & Interval Controls - Compact Design */}
+      <div className="bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-slate-100 mb-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           {/* Time Range & Interval Dropdowns */}
           <div className="flex flex-wrap items-center gap-4 sm:gap-6">
             {/* Time Range Dropdown */}
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-slate-600 font-medium">Time Range</span>
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-blue-50 rounded-lg">
+                <Clock size={14} className="text-blue-600" />
+              </div>
+              <span className="text-xs text-slate-600 font-medium">Range</span>
               <div className="relative">
                 <select
                   value={dateRange}
@@ -306,7 +396,7 @@ const HistoricalWindow = ({
                       setDateRange(e.target.value);
                     }
                   }}
-                  className="appearance-none bg-white border border-slate-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer hover:border-slate-400 transition-colors min-w-[100px]"
+                  className="appearance-none bg-white border border-slate-300 rounded-lg px-3 py-1.5 pr-8 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer hover:border-slate-400 transition-colors min-w-[80px]"
                 >
                   <option value="1m">1m</option>
                   <option value="5m">5m</option>
@@ -318,8 +408,8 @@ const HistoricalWindow = ({
                   <option value="30d">30d</option>
                   <option value="custom">Custom</option>
                 </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
@@ -327,13 +417,16 @@ const HistoricalWindow = ({
             </div>
 
             {/* Interval Dropdown */}
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-slate-600 font-medium">Interval</span>
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-purple-50 rounded-lg">
+                <Activity size={14} className="text-purple-600" />
+              </div>
+              <span className="text-xs text-slate-600 font-medium">Interval</span>
               <div className="relative">
                 <select
                   value={granularity}
                   onChange={(e) => setGranularity(e.target.value)}
-                  className="appearance-none bg-white border border-slate-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer hover:border-slate-400 transition-colors min-w-[120px]"
+                  className="appearance-none bg-white border border-slate-300 rounded-lg px-3 py-1.5 pr-8 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer hover:border-slate-400 transition-colors min-w-[100px]"
                 >
                   <option value="auto">Auto</option>
                   <option value="1s">1 Second</option>
@@ -345,20 +438,26 @@ const HistoricalWindow = ({
                   <option value="monthly">Monthly</option>
                   <option value="custom">Custom</option>
                 </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
               </div>
             </div>
+
+            {/* Pill Badges for Metadata */}
+            <div className="flex items-center gap-2">
+              <PillBadge icon={Clock} label="Range" value={dateRange} color="blue" />
+              <PillBadge icon={Database} label="Source" value="Live" color="green" />
+              <PillBadge icon={Activity} label="Points" value={productionData.length || '—'} color="purple" />
+            </div>
           </div>
 
-          {/* Refresh & Export Buttons */}
+          {/* Actions - Aligned Right */}
           <div className="flex items-center gap-3">
-            {/* Last Updated Indicator */}
             {lastUpdated && !isLoading && (
-              <span className="text-xs text-slate-400">
+              <span className="text-[10px] text-slate-400">
                 Updated: {lastUpdated.toLocaleTimeString()}
               </span>
             )}
@@ -366,10 +465,10 @@ const HistoricalWindow = ({
             {/* Export Button */}
             <button
               onClick={() => setShowExportDialog(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors shadow-sm"
             >
-              <Download size={16} />
-              Export Data
+              <Download size={14} />
+              Export CSV
             </button>
           </div>
         </div>
@@ -378,7 +477,9 @@ const HistoricalWindow = ({
       {/* Error Message */}
       {dataError && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-center gap-3">
-          <AlertTriangle className="text-red-500" size={20} />
+          <div className="p-1.5 bg-red-100 rounded-lg">
+            <AlertTriangle className="text-red-500" size={18} />
+          </div>
           <div>
             <p className="text-sm font-semibold text-red-800">Error Loading Data</p>
             <p className="text-xs text-red-600">{dataError}</p>
@@ -392,7 +493,7 @@ const HistoricalWindow = ({
         </div>
       )}
 
-      {/* Production Volume & OEE Trends */}
+      {/* Production Volume & OEE Trends - Compact Headers */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 relative">
         {isLoading && (
           <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-xl">
@@ -402,31 +503,50 @@ const HistoricalWindow = ({
             </div>
           </div>
         )}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+
+        {/* Production Volume Card */}
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-slate-800 uppercase">Production Volume Trends</h3>
-            <div className="flex items-center gap-4 text-xs">
-              <span className="text-slate-500">Current: <span className="font-bold text-blue-600">{currentUnits || 0}</span></span>
-              <span className="text-slate-500">Target: <span className="font-bold text-green-600">{targetUnits}</span></span>
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-blue-50 rounded-lg">
+                <TrendingUp size={16} className="text-blue-600" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800 uppercase">Production Volume</h3>
+              {/* Inline Pill Badges */}
+              <div className="flex items-center gap-1.5 ml-2">
+                <PillBadge label="Current" value={currentUnits || 0} color="blue" />
+                <PillBadge label="Target" value={targetUnits} color="green" />
+              </div>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={productionData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: '11px' }} />
-              <ReferenceLine y={targetUnits} stroke="#10B981" strokeDasharray="5 5" strokeWidth={2} label={{ value: `Target: ${targetUnits}`, fill: '#10B981', fontSize: 10, position: 'right' }} />
-              <Bar dataKey="produced" fill="#3B82F6" name="Produced" />
-              <Bar dataKey="target" fill="#94a3b8" name="Target" />
-            </BarChart>
-          </ResponsiveContainer>
+          {productionData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={productionData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} domain={[0, Math.max(targetUnits, currentUnits || 0) * 1.2]} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: '10px' }} />
+                <ReferenceLine y={targetUnits} stroke="#10B981" strokeDasharray="5 5" strokeWidth={2} label={{ value: `Target: ${targetUnits}`, fill: '#10B981', fontSize: 9, position: 'right' }} />
+                <Bar dataKey="produced" fill="#3B82F6" name="Produced" />
+                <Bar dataKey="target" fill="#94a3b8" name="Target" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[220px] flex flex-col items-center justify-center text-slate-400">
+              <Database size={32} className="mb-2 opacity-50" />
+              <p className="text-sm font-medium">No historical data available</p>
+              <p className="text-xs mt-1">Waiting for production data...</p>
+            </div>
+          )}
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <h3 className="text-sm font-bold text-slate-800 uppercase mb-4">OEE Trends (Weekly)</h3>
-          <ResponsiveContainer width="100%" height={250}>
+        {/* OEE Trends Card */}
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
+          <SectionHeader icon={Activity} title="OEE Trends (Weekly)" iconColor="text-green-600">
+            <PillBadge label="MTBF" value={mtbfHours > 0 ? `${mtbfHours}h` : 'Collecting...'} color="green" />
+          </SectionHeader>
+          <ResponsiveContainer width="100%" height={220}>
             <LineChart data={oeeData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#94a3b8' }} />
@@ -435,139 +555,132 @@ const HistoricalWindow = ({
               <Line type="monotone" dataKey="oee" stroke="#10B981" strokeWidth={3} dot={{ r: 4 }} name="OEE %" />
             </LineChart>
           </ResponsiveContainer>
-          <div className="mt-4 flex items-center gap-2 text-xs">
-            <TrendingUp size={16} className="text-green-500" />
-            <span className="font-semibold text-slate-600">MTBF (Mean Time Between Failures): <span className="text-green-600">{mtbfHours > 0 ? `${mtbfHours} hours` : '0 hours (collecting data...)'}</span></span>
-          </div>
         </div>
       </div>
 
       {/* Machine Performance & Environmental Trends */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-slate-800 uppercase">Machine Performance Trends</h3>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-purple-50 rounded-lg">
+                <Activity size={16} className="text-purple-600" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800 uppercase">Machine Performance</h3>
+            </div>
+            <div className="flex gap-1.5">
               <button
                 onClick={() => toggleMachineMetric('vibration')}
-                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${machineVisibility.vibration ? 'bg-purple-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold transition-colors ${machineVisibility.vibration ? 'bg-purple-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {machineVisibility.vibration ? <Eye size={14} /> : <EyeOff size={14} />}
-                Vibration
+                {machineVisibility.vibration ? <Eye size={12} /> : <EyeOff size={12} />}
+                Vib
               </button>
               <button
                 onClick={() => toggleMachineMetric('pressure')}
-                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${machineVisibility.pressure ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold transition-colors ${machineVisibility.pressure ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {machineVisibility.pressure ? <Eye size={14} /> : <EyeOff size={14} />}
-                Pressure
+                {machineVisibility.pressure ? <Eye size={12} /> : <EyeOff size={12} />}
+                Press
               </button>
               <button
                 onClick={() => toggleMachineMetric('noise')}
-                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${machineVisibility.noise ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold transition-colors ${machineVisibility.noise ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {machineVisibility.noise ? <Eye size={14} /> : <EyeOff size={14} />}
+                {machineVisibility.noise ? <Eye size={12} /> : <EyeOff size={12} />}
                 Noise
               </button>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={260}>
             <LineChart data={machinePerformanceData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <Tooltip />
-              <Legend wrapperStyle={{ fontSize: '11px' }} />
-              {/* Threshold reference lines */}
+              <Legend wrapperStyle={{ fontSize: '10px' }} />
               {machineVisibility.vibration && thresholds.vibration?.critical && (
-                <ReferenceLine yAxisId="left" y={thresholds.vibration.critical} stroke="#EF4444" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Vib Critical: ${thresholds.vibration.critical}`, fill: '#EF4444', fontSize: 9, position: 'insideTopRight' }} />
+                <ReferenceLine yAxisId="left" y={thresholds.vibration.critical} stroke="#EF4444" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Vib: ${thresholds.vibration.critical}`, fill: '#EF4444', fontSize: 8, position: 'insideTopRight' }} />
               )}
               {machineVisibility.noise && thresholds.noise?.critical && (
-                <ReferenceLine yAxisId="right" y={thresholds.noise.critical} stroke="#F59E0B" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Noise: ${thresholds.noise.critical}dB`, fill: '#F59E0B', fontSize: 9, position: 'insideBottomRight' }} />
+                <ReferenceLine yAxisId="right" y={thresholds.noise.critical} stroke="#F59E0B" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Noise: ${thresholds.noise.critical}dB`, fill: '#F59E0B', fontSize: 8, position: 'insideBottomRight' }} />
               )}
               {machineVisibility.vibration && (
-                <Line yAxisId="left" type="monotone" dataKey="vibration" stroke="#A855F7" strokeWidth={2} dot={{ r: 3 }} name="Vibration (mm/s)" />
+                <Line yAxisId="left" type="monotone" dataKey="vibration" stroke="#A855F7" strokeWidth={2} dot={{ r: 2 }} name="Vibration (mm/s)" />
               )}
               {machineVisibility.pressure && (
-                <Line yAxisId="right" type="monotone" dataKey="pressure" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} name="Pressure (bar)" />
+                <Line yAxisId="right" type="monotone" dataKey="pressure" stroke="#3B82F6" strokeWidth={2} dot={{ r: 2 }} name="Pressure (bar)" />
               )}
               {machineVisibility.noise && (
-                <Line yAxisId="right" type="monotone" dataKey="noise" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3 }} name="Noise (dB)" />
+                <Line yAxisId="right" type="monotone" dataKey="noise" stroke="#F59E0B" strokeWidth={2} dot={{ r: 2 }} name="Noise (dB)" />
               )}
             </LineChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-slate-800 uppercase">Environmental Trends</h3>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-green-50 rounded-lg">
+                <Activity size={16} className="text-green-600" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800 uppercase">Environmental</h3>
+            </div>
+            <div className="flex gap-1.5">
               <button
                 onClick={() => toggleEnvMetric('temperature')}
-                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${envVisibility.temperature ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold transition-colors ${envVisibility.temperature ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {envVisibility.temperature ? <Eye size={14} /> : <EyeOff size={14} />}
+                {envVisibility.temperature ? <Eye size={12} /> : <EyeOff size={12} />}
                 Temp
               </button>
               <button
                 onClick={() => toggleEnvMetric('humidity')}
-                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${envVisibility.humidity ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold transition-colors ${envVisibility.humidity ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {envVisibility.humidity ? <Eye size={14} /> : <EyeOff size={14} />}
-                Humidity
+                {envVisibility.humidity ? <Eye size={12} /> : <EyeOff size={12} />}
+                Hum
               </button>
               <button
                 onClick={() => toggleEnvMetric('co2')}
-                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${envVisibility.co2 ? 'bg-pink-500 text-white' : 'bg-slate-100 text-slate-400'
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold transition-colors ${envVisibility.co2 ? 'bg-pink-500 text-white' : 'bg-slate-100 text-slate-400'
                   }`}
               >
-                {envVisibility.co2 ? <Eye size={14} /> : <EyeOff size={14} />}
+                {envVisibility.co2 ? <Eye size={12} /> : <EyeOff size={12} />}
                 CO2
-              </button>
-              <button
-                onClick={() => toggleEnvMetric('aqi')}
-                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold transition-colors ${envVisibility.aqi ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-400'
-                  }`}
-              >
-                {envVisibility.aqi ? <Eye size={14} /> : <EyeOff size={14} />}
-                AQI
               </button>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={220}>
             <LineChart data={environmentalData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <Tooltip />
-              <Legend wrapperStyle={{ fontSize: '11px' }} />
-              {/* Threshold reference lines for environmental sensors */}
+              <Legend wrapperStyle={{ fontSize: '10px' }} />
               {envVisibility.temperature && thresholds.temperature?.max && (
-                <ReferenceLine y={thresholds.temperature.max} stroke="#EF4444" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Temp Max: ${thresholds.temperature.max}°C`, fill: '#EF4444', fontSize: 9, position: 'insideTopRight' }} />
+                <ReferenceLine y={thresholds.temperature.max} stroke="#EF4444" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Temp: ${thresholds.temperature.max}°C`, fill: '#EF4444', fontSize: 8, position: 'insideTopRight' }} />
               )}
               {envVisibility.humidity && thresholds.humidity?.max && (
-                <ReferenceLine y={thresholds.humidity.max} stroke="#3B82F6" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Hum Max: ${thresholds.humidity.max}%`, fill: '#3B82F6', fontSize: 9, position: 'insideBottomRight' }} />
+                <ReferenceLine y={thresholds.humidity.max} stroke="#3B82F6" strokeDasharray="5 5" strokeWidth={1} label={{ value: `Hum: ${thresholds.humidity.max}%`, fill: '#3B82F6', fontSize: 8, position: 'insideBottomRight' }} />
               )}
               {envVisibility.co2 && thresholds.co2?.max && (
-                <ReferenceLine y={thresholds.co2.max} stroke="#EC4899" strokeDasharray="5 5" strokeWidth={1} label={{ value: `CO2 Max: ${thresholds.co2.max}`, fill: '#EC4899', fontSize: 9, position: 'insideTopLeft' }} />
+                <ReferenceLine y={thresholds.co2.max} stroke="#EC4899" strokeDasharray="5 5" strokeWidth={1} label={{ value: `CO2: ${thresholds.co2.max}`, fill: '#EC4899', fontSize: 8, position: 'insideTopLeft' }} />
               )}
               {envVisibility.temperature && (
-                <Line type="monotone" dataKey="temperature" stroke="#10B981" strokeWidth={2} dot={{ r: 3 }} name="Temperature (°C)" />
+                <Line type="monotone" dataKey="temperature" stroke="#10B981" strokeWidth={2} dot={{ r: 2 }} name="Temperature (°C)" />
               )}
               {envVisibility.humidity && (
-                <Line type="monotone" dataKey="humidity" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} name="Humidity (%)" />
+                <Line type="monotone" dataKey="humidity" stroke="#3B82F6" strokeWidth={2} dot={{ r: 2 }} name="Humidity (%)" />
               )}
               {envVisibility.co2 && (
-                <Line type="monotone" dataKey="co2" stroke="#EC4899" strokeWidth={2} dot={{ r: 3 }} name="CO2 (%)" />
-              )}
-              {envVisibility.aqi && (
-                <Line type="monotone" dataKey="aqi" stroke="#14B8A6" strokeWidth={2} dot={{ r: 3 }} name="Air Quality Index" />
+                <Line type="monotone" dataKey="co2" stroke="#EC4899" strokeWidth={2} dot={{ r: 2 }} name="CO2 (%)" />
               )}
             </LineChart>
           </ResponsiveContainer>
@@ -576,12 +689,9 @@ const HistoricalWindow = ({
 
       {/* Downtime Analysis & Event Log */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle size={20} className="text-yellow-600" />
-            <h3 className="text-sm font-bold text-slate-800 uppercase">Downtime Causes (Pareto Analysis)</h3>
-          </div>
-          <ResponsiveContainer width="100%" height={250}>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
+          <SectionHeader icon={AlertTriangle} title="Downtime Causes (Pareto)" iconColor="text-amber-600" />
+          <ResponsiveContainer width="100%" height={220}>
             <BarChart data={downtimeData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} />
@@ -592,62 +702,64 @@ const HistoricalWindow = ({
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-slate-800 uppercase">Detailed Event Log</h3>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-slate-100 rounded-lg">
+                <Search size={16} className="text-slate-600" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800 uppercase">Event Log</h3>
+            </div>
+            <div className="flex items-center gap-2">
               <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search events..."
+                  placeholder="Search..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="pl-7 pr-3 py-1 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 w-28"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <Filter size={16} className="text-slate-600" />
-                <select
-                  value={severityFilter}
-                  onChange={(e) => setSeverityFilter(e.target.value)}
-                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Severities</option>
-                  <option value="Critical">Critical</option>
-                  <option value="Warning">Warning</option>
-                  <option value="Info">Info</option>
-                </select>
-              </div>
+              <select
+                value={severityFilter}
+                onChange={(e) => setSeverityFilter(e.target.value)}
+                className="px-2 py-1 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All</option>
+                <option value="Critical">Critical</option>
+                <option value="Warning">Warning</option>
+                <option value="Info">Info</option>
+              </select>
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[250px] overflow-y-auto">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto max-h-[200px] overflow-y-auto">
+            <table className="w-full text-[10px]">
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase sticky top-0">
                 <tr>
-                  <th className="p-2 text-left">Timestamp</th>
-                  <th className="p-2 text-left">Severity</th>
-                  <th className="p-2 text-left">Device</th>
-                  <th className="p-2 text-left">Event</th>
-                  <th className="p-2 text-left">Code</th>
+                  <th className="p-1.5 text-left">Time</th>
+                  <th className="p-1.5 text-left">Severity</th>
+                  <th className="p-1.5 text-left">Device</th>
+                  <th className="p-1.5 text-left">Event</th>
+                  <th className="p-1.5 text-left">Code</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredEvents.map((event, i) => (
                   <tr key={i} className="hover:bg-slate-50">
-                    <td className="p-2 whitespace-nowrap text-slate-600 font-medium">{event.timestamp}</td>
-                    <td className="p-2">
-                      <span className={`px-2 py-1 rounded text-[10px] font-bold ${event.severity === 'Critical' ? 'bg-red-100 text-red-800' :
+                    <td className="p-1.5 whitespace-nowrap text-slate-600 font-medium">{event.timestamp}</td>
+                    <td className="p-1.5">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${event.severity === 'Critical' ? 'bg-red-100 text-red-800' :
                         event.severity === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
                           'bg-blue-100 text-blue-800'
                         }`}>
                         {event.severity}
                       </span>
                     </td>
-                    <td className="p-2 text-slate-700 font-semibold">{event.device}</td>
-                    <td className="p-2 text-slate-600">{event.event}</td>
-                    <td className="p-2 text-slate-500 font-mono">{event.code}</td>
+                    <td className="p-1.5 text-slate-700 font-semibold">{event.device}</td>
+                    <td className="p-1.5 text-slate-600 max-w-[120px] truncate" title={event.event}>{event.event}</td>
+                    <td className="p-1.5 text-slate-500 font-mono">{event.code}</td>
                   </tr>
                 ))}
               </tbody>

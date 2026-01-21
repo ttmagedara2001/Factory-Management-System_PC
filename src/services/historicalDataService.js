@@ -83,7 +83,7 @@ export const getStreamDataByTopic = async (
     );
     console.log(`⏰ [Historical] Time range: ${startTime} to ${endTime}`);
 
-    const response = await api.post("/get-stream-data/device/topic", {
+    const response = await api.post("/user/get-stream-data/device/topic", {
       deviceId,
       topic: formattedTopic,
       startTime,
@@ -124,7 +124,7 @@ export const getStreamDataForDevice = async (
   try {
     console.log(`📊 [Historical] Fetching all stream data for ${deviceId}`);
 
-    const response = await api.post("/get-stream-data/device", {
+    const response = await api.post("/user/get-stream-data/device", {
       deviceId,
       startTime,
       endTime,
@@ -162,7 +162,7 @@ export const getStreamDataForUser = async (
   try {
     console.log(`📊 [Historical] Fetching user stream data`);
 
-    const response = await api.post("/get-stream-data/user", {
+    const response = await api.post("/user/get-stream-data/user", {
       startTime,
       endTime,
       pagination: String(pagination),
@@ -195,7 +195,7 @@ export const deleteStreamDataById = async (deviceId, topic, dataIds) => {
       `🗑️ [Historical] Deleting ${dataIds.length} records for ${deviceId}/${topic}`
     );
 
-    const response = await api.delete("/delete-stream-data-by-id", {
+    const response = await api.delete("/user/delete-stream-data-by-id", {
       data: {
         deviceId,
         topic,
@@ -225,7 +225,7 @@ export const deleteStateTopic = async (deviceId, topic) => {
       `🗑️ [Historical] Deleting state topic ${topic} for ${deviceId}`
     );
 
-    const response = await api.delete("/delete-state-topic", {
+    const response = await api.delete("/user/delete-state-topic", {
       data: {
         deviceId,
         topic,
@@ -759,11 +759,13 @@ export const getMachinePerformanceData = async (
 // ============================================
 
 /**
- * Fetch environmental metrics (temperature, humidity, co2, aqi)
+ * Fetch environmental metrics (temperature, humidity, co2)
+ * Note: AQI is calculated client-side from these values, not fetched from API
  */
 export const getEnvironmentalData = async (deviceId, startTime, endTime) => {
   try {
-    const topics = ["temperature", "humidity", "co2", "aqi"];
+    // Only fetch temperature, humidity, co2 - AQI is calculated client-side
+    const topics = ["temperature", "humidity", "co2"];
 
     console.log(`🌡️ [Environment] Fetching data for ${deviceId}`);
 
@@ -797,7 +799,7 @@ export const getEnvironmentalData = async (deviceId, startTime, endTime) => {
               temperature: null,
               humidity: null,
               co2: null,
-              aqi: null,
+              // AQI removed - calculated client-side
             });
           }
 

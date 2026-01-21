@@ -1,10 +1,21 @@
-import axios from "axios";
+// ============================================
+// AUTHENTICATION SERVICE - Cookie-Based Auth
+// ============================================
+// Uses fetch with credentials: 'include' for HttpOnly cookie handling
+// The server sets authentication cookies on successful login
+// ============================================
 
-// Import shared API URL utility
 import { getApiUrl } from "./api.js";
 const API_URL = getApiUrl();
 
-// Authentication and get JWT + refresh token
+/**
+ * Login and authenticate with the Protonest API
+ * Uses fetch with credentials: 'include' to handle HttpOnly cookies
+ * 
+ * @param {string} email - User email
+ * @param {string} password - Secret key from Protonest dashboard
+ * @returns {Promise<{userId: string}>} User ID on success
+ */
 export const login = async (email, password) => {
   try {
     // Validate input before making request
@@ -21,114 +32,100 @@ export const login = async (email, password) => {
     }
 
     console.log("🔄 Making secure authentication request to:", API_URL);
-    console.log(
-      "📋 IMPORTANT: Using secretKey as password (not login password)"
-    );
+    console.log("📋 IMPORTANT: Using secretKey as password (not login password)");
 
-    // Based on API documentation, use exact payload structure
-    const payload = {
-      email: cleanEmail,
-      password: cleanPassword, // This should be the secretKey from Protonest dashboard
-    };
-
-    console.log("🔄 Attempting /get-token with documented payload structure:", {
+    console.log("🔄 Attempting /user/get-token with documented payload structure:", {
       email: cleanEmail,
       passwordType: "secretKey",
       passwordLength: cleanPassword.length,
     });
 
     try {
-      const response = await axios.post(`${API_URL}/get-token`, payload, {
+      // ═══════════════════════════════════════════════════════════════════════
+      // COOKIE-BASED AUTH: Use fetch with credentials: 'include'
+      // This allows the browser to receive and store HttpOnly cookies
+      // ═══════════════════════════════════════════════════════════════════════
+      const response = await fetch(`${API_URL}/user/get-token`, {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "Cache-Control": "no-cache",
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
         },
-        timeout: 10000,
+        credentials: 'include', // ⭐ REQUIRED for HttpOnly cookies
+        body: JSON.stringify({
+          email: cleanEmail,
+          password: cleanPassword,
+        }),
       });
 
-      console.log("✅ Authentication request successful");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        
+        if (response.status === 400) {
+          console.error("❌ Authentication failed (400):", {
+            serverResponse: JSON.stringify(errorData, null, 2),
+            possibleCauses: [
+              "Invalid email format - check email address",
+              "Invalid credentials - verify email is registered",
+              "Wrong secretKey - check Protonest dashboard for correct secretKey",
+              "User not found - email not registered in system",
+              "Email not verified - check email verification status",
+            ],
+          });
 
-      // Check for successful response according to API docs
-      if (response.data.status === "Success") {
-        const jwtToken = response.data.data?.jwtToken;
-        const refreshToken = response.data.data?.refreshToken;
+          if (errorData?.data === "Invalid email format") {
+            throw new Error("Invalid email format. Please check the email address.");
+          } else if (errorData?.data === "Invalid credentials") {
+            throw new Error("Invalid credentials. Please verify the email and secretKey from Protonest dashboard.");
+          } else if (errorData?.data === "User not found") {
+            throw new Error("User not found. Please check if the email is registered in the system.");
+          } else if (errorData?.data === "Email not verified") {
+            throw new Error("Email not verified. Please verify your email address first.");
+          } else {
+            throw new Error(`Authentication failed: ${errorData?.data || "Please verify email and secretKey"}`);
+          }
+        } else if (response.status === 500) {
+          console.error("❌ Server error (500):", errorData);
+          throw new Error("Internal server error. Please try again later.");
+        } else {
+          throw new Error(`Login failed with status ${response.status}`);
+        }
+      }
 
-        if (!jwtToken) {
-          throw new Error("No JWT token in response data");
+      const data = await response.json();
+
+      // Check for successful response
+      if (data.status === "Success") {
+        console.log("✅ Login successful, cookies stored by browser");
+        console.log("🍪 HttpOnly cookies set - authentication ready");
+        
+        // Note: With cookie-based auth, we don't need to store tokens
+        // The browser automatically handles HttpOnly cookies
+        // We may still receive tokens in response for backwards compatibility
+        const jwtToken = data.data?.jwtToken;
+        const refreshToken = data.data?.refreshToken;
+
+        if (jwtToken) {
+          console.log("🎫 JWT Token also received (first 30 chars):", jwtToken.substring(0, 30) + "...");
         }
 
-        console.log(
-          "✅ Login successful via /get-token. JWT token received securely."
-        );
-        console.log(
-          "🎫 JWT Token (first 30 chars):",
-          jwtToken.substring(0, 30) + "..."
-        );
-        console.log("🔄 Refresh Token:", refreshToken ? "YES" : "NO");
-        console.log("");
-
-        return { jwtToken, refreshToken, userId: cleanEmail };
+        return { 
+          userId: cleanEmail,
+          jwtToken: jwtToken || null,
+          refreshToken: refreshToken || null
+        };
       } else {
-        throw new Error(
-          `Authentication failed: ${
-            response.data.message || "Unexpected response status"
-          }`
-        );
+        throw new Error(`Authentication failed: ${data.message || "Unexpected response status"}`);
       }
     } catch (error) {
-      // Enhanced error logging based on API documentation
-      if (error.response?.status === 400) {
-        const serverResponse = error.response.data;
-
-        console.error("❌ Authentication failed (400):", {
-          serverResponse: JSON.stringify(serverResponse, null, 2),
-          possibleCauses: [
-            "Invalid email format - check email address",
-            "Invalid credentials - verify email is registered",
-            "Wrong secretKey - check Protonest dashboard for correct secretKey",
-            "User not found - email not registered in system",
-            "Email not verified - check email verification status",
-          ],
-        });
-
-        // Provide specific error message based on server response
-        if (serverResponse?.data === "Invalid email format") {
-          throw new Error(
-            "Invalid email format. Please check the email address."
-          );
-        } else if (serverResponse?.data === "Invalid credentials") {
-          throw new Error(
-            "Invalid credentials. Please verify the email and secretKey from Protonest dashboard."
-          );
-        } else if (serverResponse?.data === "User not found") {
-          throw new Error(
-            "User not found. Please check if the email is registered in the system."
-          );
-        } else if (serverResponse?.data === "Email not verified") {
-          throw new Error(
-            "Email not verified. Please verify your email address first."
-          );
-        } else {
-          throw new Error(
-            `Authentication failed: ${
-              serverResponse?.data || "Please verify email and secretKey"
-            }`
-          );
-        }
-      } else if (error.response?.status === 500) {
-        console.error("❌ Server error (500):", error.response.data);
-        throw new Error("Internal server error. Please try again later.");
-      } else {
-        console.error(
-          `❌ Unexpected error (${error.response?.status}):`,
-          error.response?.data
-        );
-        throw error;
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.error("❌ Network error - could not reach API server");
+        throw new Error("Network error. Please check your internet connection.");
       }
+      throw error;
     }
   } catch (error) {
-    // Final error logging
     console.error("❌ Login process failed:", {
       message: error.message,
       email: email?.trim(),
@@ -138,5 +135,3 @@ export const login = async (email, password) => {
     throw error;
   }
 };
-
-

@@ -3,15 +3,15 @@ import { TrendingUp, TrendingDown, Target, Edit2, Check, X } from 'lucide-react'
 import RealTimeWindow from './RealTimeWindow';
 
 
-const Dashboard = ({ 
-  bellClicked, 
-  thresholds, 
-  sensorData, 
-  webSocketClient, 
-  selectedDevice, 
-  onDeviceChange, 
-  devices, 
-  alerts, 
+const Dashboard = ({
+  bellClicked,
+  thresholds,
+  sensorData,
+  webSocketClient,
+  selectedDevice,
+  onDeviceChange,
+  devices,
+  alerts,
   setAlerts,
   targetUnits,
   setTargetUnits,
@@ -54,9 +54,15 @@ const Dashboard = ({
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto">
 
-      {/* Dashboard Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+      {/* Dashboard Header - Increased vertical spacing */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 sm:mb-10">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          {/* Consistent icon container style */}
+          <div className="p-2 bg-blue-50 rounded-xl">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            </svg>
+          </div>
           <h1 className="text-lg sm:text-xl font-bold text-slate-800 uppercase tracking-wide">Dashboard</h1>
           {/* Show selected device name */}
           <span className="px-2 py-1 rounded text-xs sm:text-base font-semibold text-blue-700 bg-blue-50">
@@ -81,7 +87,7 @@ const Dashboard = ({
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-[10px] font-bold text-slate-500 uppercase">Daily Production</h3>
                 {!isEditingTarget && (
-                  <button 
+                  <button
                     onClick={() => setIsEditingTarget(true)}
                     className="p-1 hover:bg-slate-100 rounded transition-colors"
                     title="Edit target"
@@ -92,11 +98,10 @@ const Dashboard = ({
               </div>
               <div className="text-2xl sm:text-4xl font-extrabold text-slate-800 mb-2">{sensorData?.units ?? '--'}</div>
               <div className="flex items-center gap-2">
-                <div className={`flex items-center text-xs font-bold px-1 rounded ${
-                  (sensorData?.units || 0) >= targetUnits 
-                    ? 'text-green-500 bg-green-50' 
-                    : 'text-yellow-500 bg-yellow-50'
-                }`}>
+                <div className={`flex items-center text-xs font-bold px-1 rounded ${(sensorData?.units || 0) >= targetUnits
+                  ? 'text-green-500 bg-green-50'
+                  : 'text-yellow-500 bg-yellow-50'
+                  }`}>
                   {(sensorData?.units || 0) >= targetUnits ? (
                     <TrendingUp size={12} className="mr-1" />
                   ) : (
@@ -113,20 +118,19 @@ const Dashboard = ({
                         setTempTargetUnits(e.target.value);
                         setTargetError('');
                       }}
-                      className={`w-20 px-2 py-0.5 text-[10px] border rounded focus:outline-none focus:ring-1 ${
-                        targetError ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
-                      }`}
+                      className={`w-20 px-2 py-0.5 text-[10px] border rounded focus:outline-none focus:ring-1 ${targetError ? 'border-red-300 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                        }`}
                       placeholder="Target"
                       min="1"
                       max="100000"
                     />
-                    <button 
+                    <button
                       onClick={handleSaveTarget}
                       className="p-0.5 hover:bg-green-100 rounded text-green-600"
                     >
                       <Check size={14} />
                     </button>
-                    <button 
+                    <button
                       onClick={handleCancelEdit}
                       className="p-0.5 hover:bg-red-100 rounded text-red-600"
                     >
@@ -149,9 +153,8 @@ const Dashboard = ({
                 {overallEfficiency?.toFixed(1) ?? '--'}%
               </div>
               <div className="flex items-center gap-2">
-                <div className={`flex items-center text-xs font-bold px-1 rounded ${
-                  efficiencyTrend >= 0 ? 'text-green-500 bg-green-50' : 'text-red-500 bg-red-50'
-                }`}>
+                <div className={`flex items-center text-xs font-bold px-1 rounded ${efficiencyTrend >= 0 ? 'text-green-500 bg-green-50' : 'text-red-500 bg-red-50'
+                  }`}>
                   {efficiencyTrend >= 0 ? (
                     <TrendingUp size={12} className="mr-1" />
                   ) : (
@@ -177,28 +180,26 @@ const Dashboard = ({
                   <span>Quality: {oeeData?.quality ?? '--'}%</span>
                 </div>
               </div>
-              <span className={`text-xs font-bold ${
-                (oeeData?.oee || 0) >= 85 ? 'text-green-500' : 
+              <span className={`text-xs font-bold ${(oeeData?.oee || 0) >= 85 ? 'text-green-500' :
                 (oeeData?.oee || 0) >= 60 ? 'text-yellow-500' : 'text-red-500'
-              }`}>{oeeData?.oee?.toFixed(1) ?? '--'}%</span>
+                }`}>{oeeData?.oee?.toFixed(1) ?? '--'}%</span>
             </div>
             <div className="h-6 sm:h-8 bg-slate-50 rounded w-full flex gap-[2px] overflow-hidden">
               {/* OEE segmented progress bar */}
               {Array.from({ length: 50 }).map((_, i) => (
                 <div
                   key={i}
-                  className={`flex-1 h-full rounded-sm ${
-                    i < oeeSegments 
-                      ? (oeeData?.oee || 0) >= 85 ? 'bg-[#4ADE80]' : (oeeData?.oee || 0) >= 60 ? 'bg-yellow-400' : 'bg-red-400'
-                      : 'bg-slate-200'
-                  }`}
+                  className={`flex-1 h-full rounded-sm ${i < oeeSegments
+                    ? (oeeData?.oee || 0) >= 85 ? 'bg-[#4ADE80]' : (oeeData?.oee || 0) >= 60 ? 'bg-yellow-400' : 'bg-red-400'
+                    : 'bg-slate-200'
+                    }`}
                 ></div>
               ))}
             </div>
           </div>
 
           {/* Real Time Window Component */}
-          <RealTimeWindow thresholds={thresholds} sensorData={sensorData} webSocketClient={webSocketClient} selectedDevice={selectedDevice} controlMode={controlMode} />
+          <RealTimeWindow thresholds={thresholds} sensorData={sensorData} selectedDevice={selectedDevice} controlMode={controlMode} />
 
         </div>
 
