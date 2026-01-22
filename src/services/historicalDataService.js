@@ -83,7 +83,7 @@ export const getStreamDataByTopic = async (
     );
     console.log(`⏰ [Historical] Time range: ${startTime} to ${endTime}`);
 
-    const response = await api.post("/get-stream-data/device/topic", {
+    const response = await api.post("/user/get-stream-data/device/topic", {
       deviceId,
       topic: formattedTopic,
       startTime,
@@ -124,7 +124,7 @@ export const getStreamDataForDevice = async (
   try {
     console.log(`📊 [Historical] Fetching all stream data for ${deviceId}`);
 
-    const response = await api.post("/get-stream-data/device", {
+    const response = await api.post("/user/get-stream-data/device", {
       deviceId,
       startTime,
       endTime,
@@ -162,7 +162,7 @@ export const getStreamDataForUser = async (
   try {
     console.log(`📊 [Historical] Fetching user stream data`);
 
-    const response = await api.post("/get-stream-data/user", {
+    const response = await api.post("/user/get-stream-data/user", {
       startTime,
       endTime,
       pagination: String(pagination),
@@ -195,7 +195,7 @@ export const deleteStreamDataById = async (deviceId, topic, dataIds) => {
       `🗑️ [Historical] Deleting ${dataIds.length} records for ${deviceId}/${topic}`
     );
 
-    const response = await api.delete("/delete-stream-data-by-id", {
+    const response = await api.delete("/user/delete-stream-data-by-id", {
       data: {
         deviceId,
         topic,
@@ -225,7 +225,7 @@ export const deleteStateTopic = async (deviceId, topic) => {
       `🗑️ [Historical] Deleting state topic ${topic} for ${deviceId}`
     );
 
-    const response = await api.delete("/delete-state-topic", {
+    const response = await api.delete("/user/delete-state-topic", {
       data: {
         deviceId,
         topic,
@@ -315,27 +315,226 @@ export const getProductionVolumeData = async (deviceId, startTime, endTime) => {
 // ============================================
 // OEE CALCULATION & STORAGE
 // ============================================
+//
+// OEE (Overall Equipment Effectiveness) = Availability × Performance × Quality
+//
+// ═══════════════════════════════════════════════════════════════════════
+// OEE FORMULA:
+// ═══════════════════════════════════════════════════════════════════════
+//
+// OEE = Availability × Performance × Quality (all as decimals 0-1)
+// Result is shown as percentage (0-100%)
+//
+// AVAILABILITY = Operating Time / Planned Production Time
+//   - Planned Production Time: Total scheduled production time
+//   - Operating Time: Time machine was actually running
+//   - Losses: Breakdowns, changeovers, setups
+//
+// PERFORMANCE = (Ideal Cycle Time × Total Count) / Operating Time
+//   OR = Actual Output / Theoretical Output
+//   - Ideal Cycle Time: Fastest possible time to produce one unit
+//   - Losses: Small stops, slow running, reduced speed
+//
+// QUALITY = Good Units / Total Units
+//   - Losses: Defects, rework, scrap
+//
+// WORLD-CLASS OEE BENCHMARKS:
+//   - Availability: 90%+
+//   - Performance: 95%+
+//   - Quality: 99%+
+//   - OEE: 85%+ (World-class)
+//   - OEE: 60% (Average manufacturing)
+//   - OEE: <40% (Poor)
+//
+// ═══════════════════════════════════════════════════════════════════════
 
 const OEE_STORAGE_KEY = "factory_oee_history";
 const MTBF_STORAGE_KEY = "factory_mtbf_data";
+const OEE_CONFIG_KEY = "factory_oee_config";
+
+// Default OEE calculation configuration
+const DEFAULT_OEE_CONFIG = {
+  plannedProductionMinutes: 480,  // 8 hours = 480 minutes
+  idealCycleTimeMinutes: 1,       // 1 minute per unit (ideal)
+  targetUnitsPerHour: 60,         // Target production rate
+  qualityThreshold: 0.98,         // Assume 98% quality if no defect data
+};
+
+/**
+ * Get OEE configuration from localStorage
+ */
+export const getOEEConfig = () => {
+  try {
+    const stored = localStorage.getItem(OEE_CONFIG_KEY);
+    if (stored) {
+      return { ...DEFAULT_OEE_CONFIG, ...JSON.parse(stored) };
+    }
+  } catch (error) {
+    console.error("Error reading OEE config:", error);
+  }
+  return DEFAULT_OEE_CONFIG;
+};
+
+/**
+ * Save OEE configuration to localStorage
+ */
+export const saveOEEConfig = (config) => {
+  try {
+    localStorage.setItem(OEE_CONFIG_KEY, JSON.stringify(config));
+    console.log("💾 [OEE] Config saved:", config);
+  } catch (error) {
+    console.error("Error saving OEE config:", error);
+  }
+};
 
 /**
  * OEE (Overall Equipment Effectiveness) Calculation
  * OEE = Availability × Performance × Quality
  *
- * - Availability = Run Time / Planned Production Time
- * - Performance = (Ideal Cycle Time × Total Count) / Run Time
- * - Quality = Good Count / Total Count
- *
- * Initially 0 until data is available
+ * @param {number} availability - Availability percentage (0-100)
+ * @param {number} performance - Performance percentage (0-100)
+ * @param {number} quality - Quality percentage (0-100)
+ * @returns {number} OEE as percentage (0-100)
  */
 export const calculateOEE = (availability, performance, quality) => {
-  // All values should be between 0 and 1 (or 0 and 100 as percentages)
-  const a = Math.min(availability, 100) / 100;
-  const p = Math.min(performance, 100) / 100;
-  const q = Math.min(quality, 100) / 100;
+  // Convert percentages to decimals, cap at 100%
+  const a = Math.min(Math.max(availability, 0), 100) / 100;
+  const p = Math.min(Math.max(performance, 0), 100) / 100;
+  const q = Math.min(Math.max(quality, 0), 100) / 100;
 
-  return a * p * q * 100; // Return as percentage
+  const oee = a * p * q * 100;
+  
+  console.log(`📊 [OEE] = ${availability.toFixed(1)}% × ${performance.toFixed(1)}% × ${quality.toFixed(1)}% = ${oee.toFixed(1)}%`);
+  
+  return oee;
+};
+
+/**
+ * Calculate OEE from production and machine data
+ * 
+ * @param {Object} params - OEE calculation parameters
+ * @param {number} params.operatingTimeMinutes - Actual operating time
+ * @param {number} params.plannedTimeMinutes - Planned production time
+ * @param {number} params.totalUnits - Total units produced
+ * @param {number} params.goodUnits - Good units (optional, defaults to totalUnits * quality threshold)
+ * @param {number} params.idealCycleTimeMinutes - Ideal time per unit
+ * @returns {Object} { oee, availability, performance, quality, details }
+ */
+export const calculateOEEDetailed = ({
+  operatingTimeMinutes = 0,
+  plannedTimeMinutes = 480,
+  totalUnits = 0,
+  goodUnits = null,
+  idealCycleTimeMinutes = 1,
+}) => {
+  // ═══════════════════════════════════════════════════════════════════════
+  // AVAILABILITY CALCULATION
+  // Availability = Operating Time / Planned Production Time
+  // ═══════════════════════════════════════════════════════════════════════
+  const availability = plannedTimeMinutes > 0 
+    ? (operatingTimeMinutes / plannedTimeMinutes) * 100 
+    : 0;
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PERFORMANCE CALCULATION
+  // Performance = (Ideal Cycle Time × Total Count) / Operating Time
+  // This measures if the machine is running at its ideal speed
+  // ═══════════════════════════════════════════════════════════════════════
+  const theoreticalTime = idealCycleTimeMinutes * totalUnits;
+  const performance = operatingTimeMinutes > 0 
+    ? (theoreticalTime / operatingTimeMinutes) * 100 
+    : 0;
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // QUALITY CALCULATION
+  // Quality = Good Units / Total Units
+  // If no defect tracking, assume 98% quality
+  // ═══════════════════════════════════════════════════════════════════════
+  const actualGoodUnits = goodUnits !== null ? goodUnits : Math.floor(totalUnits * 0.98);
+  const quality = totalUnits > 0 
+    ? (actualGoodUnits / totalUnits) * 100 
+    : 100; // 100% quality if no units (no defects possible)
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // OEE CALCULATION
+  // OEE = Availability × Performance × Quality
+  // ═══════════════════════════════════════════════════════════════════════
+  const oee = calculateOEE(availability, performance, quality);
+
+  // OEE Rating
+  let rating = 'Poor';
+  if (oee >= 85) rating = 'World-Class';
+  else if (oee >= 70) rating = 'Good';
+  else if (oee >= 60) rating = 'Average';
+  else if (oee >= 40) rating = 'Below Average';
+
+  return {
+    oee: Math.round(oee * 10) / 10,
+    availability: Math.round(availability * 10) / 10,
+    performance: Math.round(Math.min(performance, 100) * 10) / 10, // Cap at 100%
+    quality: Math.round(quality * 10) / 10,
+    rating,
+    details: {
+      operatingTimeMinutes,
+      plannedTimeMinutes,
+      totalUnits,
+      goodUnits: actualGoodUnits,
+      defectUnits: totalUnits - actualGoodUnits,
+      theoreticalTimeMinutes: theoreticalTime,
+      idealCycleTimeMinutes,
+    }
+  };
+};
+
+/**
+ * Calculate OEE from sensor data and production counts
+ * Uses machine state data to estimate availability
+ * 
+ * @param {Object} params
+ * @param {number} params.unitsProduced - Units produced in the period
+ * @param {number} params.machineRunTime - Time machine was in RUN state (minutes)
+ * @param {number} params.totalTime - Total time period (minutes)
+ * @param {Object} params.sensorData - Current sensor readings for quality estimation
+ */
+export const calculateOEEFromProductionData = ({
+  unitsProduced = 0,
+  machineRunTime = null,
+  totalTime = 480,
+  sensorData = {},
+}) => {
+  const config = getOEEConfig();
+  
+  // Estimate operating time if not provided
+  // Default assumption: machine runs 75% of planned time
+  const operatingTime = machineRunTime !== null 
+    ? machineRunTime 
+    : totalTime * 0.75;
+
+  // Estimate quality from sensor data
+  // Poor environmental conditions may affect quality
+  let qualityFactor = 0.98; // Default 98%
+  
+  if (sensorData.vibration && sensorData.vibration > 7) {
+    qualityFactor -= 0.05; // High vibration reduces quality
+  }
+  if (sensorData.temperature && (sensorData.temperature > 35 || sensorData.temperature < 15)) {
+    qualityFactor -= 0.03; // Temperature out of range reduces quality
+  }
+  if (sensorData.humidity && sensorData.humidity > 70) {
+    qualityFactor -= 0.02; // High humidity reduces quality
+  }
+
+  qualityFactor = Math.max(qualityFactor, 0.85); // Minimum 85% quality
+
+  const goodUnits = Math.floor(unitsProduced * qualityFactor);
+
+  return calculateOEEDetailed({
+    operatingTimeMinutes: operatingTime,
+    plannedTimeMinutes: totalTime,
+    totalUnits: unitsProduced,
+    goodUnits: goodUnits,
+    idealCycleTimeMinutes: config.idealCycleTimeMinutes,
+  });
 };
 
 /**
@@ -360,7 +559,7 @@ export const saveOEEDataPoint = (dataPoint) => {
   try {
     const history = getOEEHistory();
 
-    // Add new data point
+    // Add new data point with full details
     history.push({
       ...dataPoint,
       timestamp: dataPoint.timestamp || new Date().toISOString(),
@@ -372,7 +571,7 @@ export const saveOEEDataPoint = (dataPoint) => {
     }
 
     localStorage.setItem(OEE_STORAGE_KEY, JSON.stringify(history));
-    console.log(`💾 [OEE] Saved data point. Total: ${history.length}`);
+    console.log(`💾 [OEE] Saved data point: ${dataPoint.oee}%. Total: ${history.length}`);
     return history;
   } catch (error) {
     console.error("Error saving OEE data:", error);
@@ -381,33 +580,40 @@ export const saveOEEDataPoint = (dataPoint) => {
 };
 
 /**
- * Calculate OEE from real-time production data
- * This should be called when production data updates
+ * Calculate OEE from real-time production data and save to history
+ * This should be called periodically (e.g., every hour or when shift ends)
+ * 
+ * @param {Object} productionData - Production metrics
+ * @param {Object} machineState - Current machine state
+ * @param {Object} sensorData - Current sensor readings
  */
-export const calculateAndStoreOEE = (productionData, machineState = {}) => {
+export const calculateAndStoreOEE = (productionData = {}, machineState = {}, sensorData = {}) => {
   const {
     totalUnits = 0,
-    goodUnits = 0,
+    goodUnits = null,
     plannedTime = 480, // Default 8 hours in minutes
     runTime = 0,
     idealCycleTime = 1, // minutes per unit
   } = productionData;
 
-  // Calculate components
-  const availability = plannedTime > 0 ? (runTime / plannedTime) * 100 : 0;
-  const performance =
-    runTime > 0 ? ((idealCycleTime * totalUnits) / runTime) * 100 : 0;
-  const quality = totalUnits > 0 ? (goodUnits / totalUnits) * 100 : 100;
-
-  const oee = calculateOEE(availability, performance, quality);
+  const result = calculateOEEDetailed({
+    operatingTimeMinutes: runTime,
+    plannedTimeMinutes: plannedTime,
+    totalUnits: totalUnits,
+    goodUnits: goodUnits,
+    idealCycleTimeMinutes: idealCycleTime,
+  });
 
   const dataPoint = {
     week: new Date().toISOString().split("T")[0],
-    oee: Math.round(oee * 10) / 10, // Round to 1 decimal
-    availability: Math.round(availability * 10) / 10,
-    performance: Math.round(performance * 10) / 10,
-    quality: Math.round(quality * 10) / 10,
+    oee: result.oee,
+    availability: result.availability,
+    performance: result.performance,
+    quality: result.quality,
+    rating: result.rating,
     machineState: machineState.status || "unknown",
+    unitsProduced: totalUnits,
+    details: result.details,
   };
 
   return saveOEEDataPoint(dataPoint);
@@ -421,11 +627,16 @@ export const getOEEChartData = () => {
   const history = getOEEHistory();
 
   if (history.length === 0) {
-    // Return initial state with 0 OEE
+    // Return initial state with calculated example data
+    const today = new Date().toISOString().split("T")[0];
     return [
       {
-        week: new Date().toISOString().split("T")[0],
+        week: today,
         oee: 0,
+        availability: 0,
+        performance: 0,
+        quality: 0,
+        rating: 'No Data',
       },
     ];
   }
@@ -441,21 +652,74 @@ export const getOEEChartData = () => {
     const weekKey = startOfWeek.toISOString().split("T")[0];
 
     if (!weeklyData.has(weekKey)) {
-      weeklyData.set(weekKey, { week: weekKey, oeeSum: 0, count: 0 });
+      weeklyData.set(weekKey, { 
+        week: weekKey, 
+        oeeSum: 0, 
+        availSum: 0,
+        perfSum: 0,
+        qualSum: 0,
+        count: 0 
+      });
     }
 
     const week = weeklyData.get(weekKey);
     week.oeeSum += record.oee || 0;
+    week.availSum += record.availability || 0;
+    week.perfSum += record.performance || 0;
+    week.qualSum += record.quality || 0;
     week.count += 1;
   });
 
   // Calculate averages and sort
   return Array.from(weeklyData.values())
-    .map((w) => ({
-      week: w.week,
-      oee: Math.round((w.oeeSum / w.count) * 10) / 10,
-    }))
+    .map((w) => {
+      const avgOee = w.oeeSum / w.count;
+      let rating = 'Poor';
+      if (avgOee >= 85) rating = 'World-Class';
+      else if (avgOee >= 70) rating = 'Good';
+      else if (avgOee >= 60) rating = 'Average';
+      else if (avgOee >= 40) rating = 'Below Average';
+
+      return {
+        week: w.week,
+        oee: Math.round((avgOee) * 10) / 10,
+        availability: Math.round((w.availSum / w.count) * 10) / 10,
+        performance: Math.round((w.perfSum / w.count) * 10) / 10,
+        quality: Math.round((w.qualSum / w.count) * 10) / 10,
+        rating,
+      };
+    })
     .sort((a, b) => new Date(a.week) - new Date(b.week));
+};
+
+/**
+ * Get current OEE summary with all components
+ * Returns the latest OEE calculation or calculates from current data
+ */
+export const getCurrentOEESummary = () => {
+  const history = getOEEHistory();
+  
+  if (history.length === 0) {
+    return {
+      oee: 0,
+      availability: 0,
+      performance: 0,
+      quality: 0,
+      rating: 'No Data',
+      lastUpdated: null,
+    };
+  }
+
+  const latest = history[history.length - 1];
+  return {
+    oee: latest.oee || 0,
+    availability: latest.availability || 0,
+    performance: latest.performance || 0,
+    quality: latest.quality || 0,
+    rating: latest.rating || 'Unknown',
+    lastUpdated: latest.timestamp,
+    unitsProduced: latest.unitsProduced || 0,
+  };
 };
 
 // ============================================

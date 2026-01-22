@@ -92,7 +92,7 @@ export const getStreamDataForDevice = async (
     );
     console.log(`⏰ [HTTP API] Time range: ${startTime} to ${endTime}`);
 
-    const response = await api.post("/get-stream-data/device", {
+    const response = await api.post("/user/get-stream-data/device", {
       deviceId,
       startTime,
       endTime,
@@ -118,7 +118,7 @@ export const getStreamDataForDevice = async (
       status: error.response?.status,
       statusText: error.response?.statusText,
       message: error.message,
-      endpoint: "/get-stream-data/device",
+      endpoint: "/user/get-stream-data/device",
     });
     throw error;
   }
@@ -152,7 +152,7 @@ export const getStateDetailsForDevice = async (deviceId) => {
   try {
     console.log(`🎛️ [HTTP API] Fetching state details for ${deviceId}`);
 
-    const response = await api.post("/get-state-details/device", {
+    const response = await api.post("/user/get-state-details/device", {
       deviceId,
     });
 
@@ -171,7 +171,7 @@ export const getStateDetailsForDevice = async (deviceId) => {
         status: error.response?.status,
         statusText: error.response?.statusText,
         message: error.message,
-        endpoint: "/get-state-details/device",
+        endpoint: "/user/get-state-details/device",
       }
     );
     throw error;
@@ -410,45 +410,48 @@ export const getStateDetailsByTopic = async (deviceId, topic) => {
 /**
  * Get the current production units count for a device from the backend
  *
- * This fetches the latest units value from the stream data.
- * Used to initialize the unit count when WebSocket connects.
+ * This fetches all product records from the last 24 hours and counts them.
+ * Units = count of products produced within 24 hours.
+ * 
+ * NOTE: We no longer use a direct 'units' stream topic. Instead:
+ * 1. Firmware publishes each product to 'fmc/product' topic
+ * 2. Dashboard fetches product records via HTTP API
+ * 3. Dashboard counts products = unit count for 24 hours
  *
  * @param {string} deviceId - Factory device ID
- * @returns {Promise<number>} Current unit count from backend
+ * @returns {Promise<number>} Current unit count (product count in 24 hours)
  */
 export const getCurrentUnitsFromBackend = async (deviceId) => {
   try {
-    console.log(`📊 [HTTP API] Fetching current units for ${deviceId}`);
+    console.log(`📊 [HTTP API] Fetching products for ${deviceId} to calculate units`);
 
-    // Get the most recent stream data to find current units
+    // Get products from the last 24 hours
     const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     const response = await api.post("/user/get-stream-data/device/topic", {
       deviceId,
-      topic: "fmc/units", // Correct MQTT suffix format
-      startTime: startOfDay.toISOString(),
+      topic: "fmc/product", // Fetch product records, not units
+      startTime: twentyFourHoursAgo.toISOString(),
       endTime: now.toISOString(),
       pagination: "0",
-      pageSize: "1", // Only need the most recent
+      pageSize: "10000", // Get all products in 24 hours
     });
 
     if (response.data.status === "Success" && response.data.data?.length > 0) {
-      // Get the most recent units value
-      const latestRecord = response.data.data[response.data.data.length - 1];
-      const units = parseInt(latestRecord.payload, 10) || 0;
-      console.log(`✅ [HTTP API] Current units from backend: ${units}`);
-      return units;
+      // Count the number of product records = units produced
+      const productCount = response.data.data.length;
+      console.log(`✅ [HTTP API] Products in 24hrs: ${productCount} -> Units: ${productCount}`);
+      return productCount;
     }
 
     console.log(
-      `ℹ️ [HTTP API] No units data found for ${deviceId}, returning 0`
+      `ℹ️ [HTTP API] No product data found for ${deviceId} in last 24 hours, returning 0 units`
     );
     return 0;
   } catch (error) {
     console.error(
-      `❌ [HTTP API] Failed to get current units for ${deviceId}:`,
+      `❌ [HTTP API] Failed to get products/units for ${deviceId}:`,
       {
         status: error.response?.status,
         message: error.message,
@@ -456,6 +459,61 @@ export const getCurrentUnitsFromBackend = async (deviceId) => {
     );
     // Return 0 on error - don't throw, let the app continue
     return 0;
+  }
+};
+
+/**
+ * Get detailed product list for a device from the last 24 hours
+ *
+ * @param {string} deviceId - Factory device ID
+ * @returns {Promise<{count: number, products: Array}>} Product count and list
+ */
+export const getProductsIn24Hours = async (deviceId) => {
+  try {
+    console.log(`📦 [HTTP API] Fetching product details for ${deviceId}`);
+
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    const response = await api.post("/user/get-stream-data/device/topic", {
+      deviceId,
+      topic: "fmc/product",
+      startTime: twentyFourHoursAgo.toISOString(),
+      endTime: now.toISOString(),
+      pagination: "0",
+      pageSize: "10000",
+    });
+
+    if (response.data.status === "Success" && response.data.data?.length > 0) {
+      const products = response.data.data.map((record, index) => ({
+        id: index + 1,
+        productID: record.payload?.productID || record.payload?.productId || `PROD-${index + 1}`,
+        productName: record.payload?.productName || "Unknown Product",
+        timestamp: record.timestamp,
+        date: new Date(record.timestamp).toLocaleDateString(),
+        time: new Date(record.timestamp).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+      }));
+
+      console.log(`✅ [HTTP API] Retrieved ${products.length} products for ${deviceId}`);
+      
+      return {
+        count: products.length,
+        products: products,
+      };
+    }
+
+    console.log(`ℹ️ [HTTP API] No products found for ${deviceId}`);
+    return { count: 0, products: [] };
+  } catch (error) {
+    console.error(`❌ [HTTP API] Failed to get products for ${deviceId}:`, {
+      status: error.response?.status,
+      message: error.message,
+    });
+    return { count: 0, products: [] };
   }
 };
 
@@ -474,21 +532,60 @@ export const getCurrentUnitsFromBackend = async (deviceId) => {
 // 3. Control Commands: User interaction → updateStateDetails() → HTTP API → MQTT broker → Device
 //
 // MQTT Topic Format (for API calls):
-// - Stream data topic: "fmc/<sensor>" (e.g., "fmc/vibration", "fmc/temperature")
+// - Stream data topic: "fmc/<sensor>" (e.g., "fmc/vibration", "fmc/temperature", "fmc/product")
 // - State data topic: "fmc/<control>" (e.g., "fmc/machineControl", "fmc/ventilation")
 //
 // Full MQTT Paths (on broker):
 // - Stream: protonest/<deviceId>/stream/fmc/<sensor>
 // - State: protonest/<deviceId>/state/fmc/<control>
 //
+// ═══════════════════════════════════════════════════════════════════════
+// UNIT COUNT CALCULATION (Product-Based)
+// ═══════════════════════════════════════════════════════════════════════
+// 
+// Units are NOT from a direct 'fmc/units' topic. Instead:
+// 1. Firmware publishes each product scan to 'fmc/product' topic
+// 2. Dashboard fetches products via HTTP API for last 24 hours
+// 3. Dashboard counts product records = unit count
+//
+// Flow:
+//   Firmware → MQTT (fmc/product) → Backend Storage
+//   Dashboard → HTTP GET (fmc/product, 24hrs) → count() = Units
+//
+// Function: getCurrentUnitsFromBackend(deviceId)
+//   - Fetches products from last 24 hours
+//   - Returns: number of products = unit count
+//
+// ═══════════════════════════════════════════════════════════════════════
+// MACHINE CONTROL (State Topic)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Topic: protonest/<deviceId>/state/fmc/machineControl
+// Payloads: {"status": "RUN"}, {"status": "STOP"}, {"status": "IDLE"}
+//
+// Flow:
+//   1. User clicks button on Dashboard
+//   2. Dashboard calls: updateStateDetails(deviceId, "machineControl", {status: "RUN"})
+//   3. HTTP POST /user/update-state-details sends to backend
+//   4. ProtoNest publishes to MQTT: protonest/<deviceId>/state/fmc/machineControl
+//   5. Firmware receives command via MQTT subscription
+//   6. Firmware executes: startMachine(), stopMachine(), or setIdle()
+//
+// Testing with MQTTX:
+//   1. Subscribe to: protonest/<deviceId>/state/fmc/#
+//   2. Publish to: protonest/<deviceId>/state/fmc/machineControl
+//      Payload: {"status": "RUN"}
+//   3. Firmware should receive and execute command
+//
+// ═══════════════════════════════════════════════════════════════════════
+//
 // Sensor Threshold Monitoring (Frontend only):
 // - Vibration: Critical > 10 mm/s, Warning > 5 mm/s
-// - Pressure: Critical < 95000 Pa or > 110000 Pa
+// - Pressure: Critical > 8 bar or < 0.5 bar, Warning > 6 bar
 // - Temperature: Critical > 40°C or < 10°C, Warning > 35°C
 // - Humidity: Warning > 70%
 // - Noise: Critical > 85 dB, Warning > 75 dB
-// - AQI: Critical > 150, Warning > 100
-// - PM2.5: Critical > 35 μg/m³, Warning > 25 μg/m³
-// - CO2: Critical > 1000 ppm, Warning > 800 ppm
+// - CO2: Critical > 70%, Warning > 45%
 //
 // ============================================
+

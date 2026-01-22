@@ -36,15 +36,15 @@ protonest/<deviceId>/<category>/fmc/<topic>
 | Temperature | `protonest/<id>/stream/fmc/temperature` | `{"temperature": "25.5"}` |
 | Humidity | `protonest/<id>/stream/fmc/humidity` | `{"humidity": "55.0"}` |
 | Vibration | `protonest/<id>/stream/fmc/vibration` | `{"vibration": "3.2"}` |
-| Pressure | `protonest/<id>/stream/fmc/pressure` | `{"pressure": "101325"}` |
+| Pressure | `protonest/<id>/stream/fmc/pressure` | `{"pressure": "4.5"}` |
 | Noise | `protonest/<id>/stream/fmc/noise` | `{"noise": "65.3"}` |
 | CO2 | `protonest/<id>/stream/fmc/co2` | `{"co2": "35"}` |
-| Units | `protonest/<id>/stream/fmc/units` | `{"units": "1250"}` |
+| Product | `protonest/<id>/stream/fmc/product` | `{"productID": "...", "productName": "..."}` |
 
 ### Message Properties
 ```
 QoS:    1
-Retain: true
+Retain: true (sensors), false (products)
 Format: JSON (values as STRINGS)
 ```
 
@@ -57,7 +57,7 @@ Format: JSON (values as STRINGS)
 protonest/<deviceId>/state/fmc/#
 ```
 
-### Machine Control
+### Machine Control ⚡
 **Topic**: `protonest/<id>/state/fmc/machineControl`
 
 ```json
@@ -66,29 +66,47 @@ protonest/<deviceId>/state/fmc/#
 {"status": "IDLE"}  // Set idle
 ```
 
+**Flow**: Dashboard → HTTP API → MQTT → Your Device
+
 ### Ventilation Control
 **Topic**: `protonest/<id>/state/fmc/ventilation`
 
 ```json
 {
-  "ventilation": "on",     // "on", "off", or "auto"
-  "mode": "manual",        // "manual" or "auto"
-  "timestamp": "2026-01-22T10:12:30Z"
+  "ventilation": "on",     // "on", "off"
+  "mode": "manual"         // "manual" or "auto"
 }
+```
+
+---
+
+## UNIT COUNT (Production Tracking)
+
+**⚠️ No direct `units` topic!**
+
+Units are calculated from product records:
+
+1. Firmware publishes each product to `fmc/product`
+2. Dashboard fetches products via HTTP (last 24 hrs)
+3. Dashboard counts records = unit count
+
+```json
+// Publish each product scan
+{"productID": "PROD-001", "productName": "Widget A"}
 ```
 
 ---
 
 ## NORMAL RANGES
 
-| Sensor | Optimal | Warning | Critical |
-|--------|---------|---------|----------|
-| Temperature | 20-25°C | >35°C | >40°C |
-| Humidity | 40-60% | >70% | >80% |
-| Vibration | 0-5 mm/s | >7 mm/s | >10 mm/s |
-| Pressure | 100-103 kPa | ±5 kPa | ±10 kPa |
-| Noise | <65 dB | >75 dB | >85 dB |
-| CO2 | <45% | 45-70% | >70% |
+| Sensor | Unit | Optimal | Warning | Critical |
+|--------|------|---------|---------|----------|
+| Temperature | °C | 20-25 | >35 | >40 |
+| Humidity | % | 40-60 | >70 | >80 |
+| Vibration | mm/s | 0-5 | >7 | >10 |
+| Pressure | bar | 1-6 | >6 | >8 |
+| Noise | dB | <65 | >75 | >85 |
+| CO2 | % | <45 | 45-70 | >70 |
 
 ---
 
@@ -100,7 +118,33 @@ protonest/<deviceId>/state/fmc/#
 | Temperature, Humidity | 10-15 sec |
 | Pressure | 5-10 sec |
 | CO2 | 30 sec |
-| Units | On event |
+| Product | On event |
+
+---
+
+## TESTING machineControl WITH MQTTX
+
+### 1. Subscribe to state topics
+```
+Topic: protonest/devicetestuc/state/fmc/#
+QoS: 1
+```
+
+### 2. Publish RUN command
+```
+Topic: protonest/devicetestuc/state/fmc/machineControl
+QoS: 1
+Retain: true
+Payload: {"status": "RUN"}
+```
+
+### 3. Publish STOP command
+```
+Topic: protonest/devicetestuc/state/fmc/machineControl
+Payload: {"status": "STOP"}
+```
+
+Your firmware should receive and execute these commands.
 
 ---
 
@@ -131,19 +175,34 @@ void publishSensor(const char* sensor, float value) {
   client.publish(topic, payload, true);
 }
 
+void publishProduct(const char* productID, const char* productName) {
+  StaticJsonDocument<128> doc;
+  char topic[100], payload[128];
+  
+  snprintf(topic, sizeof(topic), 
+    "protonest/%s/stream/fmc/product", device_id);
+  
+  doc["productID"] = productID;
+  doc["productName"] = productName;
+  serializeJson(doc, payload);
+  
+  client.publish(topic, payload, false);  // Retain = false
+}
+
 void callback(char* topic, byte* payload, unsigned int len) {
   StaticJsonDocument<256> doc;
   deserializeJson(doc, payload, len);
   
   if (strstr(topic, "machineControl")) {
     const char* status = doc["status"];
-    // Handle: RUN, STOP, IDLE
+    if (strcmp(status, "RUN") == 0) startMachine();
+    if (strcmp(status, "STOP") == 0) stopMachine();
   }
   
   if (strstr(topic, "ventilation")) {
     const char* vent = doc["ventilation"];
     const char* mode = doc["mode"];
-    // Handle: on/off/auto, manual/auto
+    // Handle: on/off, manual/auto
   }
 }
 
@@ -166,7 +225,12 @@ void loop() {
     last = millis();
     publishSensor("temperature", readTemp());
     publishSensor("humidity", readHumidity());
-    publishSensor("vibration", readVibration());
+    publishSensor("pressure", readPressure()); // in bar
+  }
+  
+  // Publish product on detection
+  if (productDetected()) {
+    publishProduct("PROD-001", "Widget");
   }
 }
 ```
@@ -179,9 +243,9 @@ void loop() {
 |----------|-----|
 | Platform | https://protonestconnect.co |
 | MQTT Broker | mqtt.protonest.co:8883 |
-| API | https://api.protonestconnect.co/api/v1/user |
+| API | https://api.protonestconnect.co/api/v1 |
 | WebSocket | wss://api.protonestconnect.co/ws |
 
 ---
 
-**Version**: 4.0 | **Updated**: January 22, 2026
+**Version**: 4.1 | **Updated**: January 22, 2026

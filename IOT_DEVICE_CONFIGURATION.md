@@ -155,13 +155,13 @@ All sensor data must be published in **JSON format**. The message will have **Qo
 **Pressure Sensor**
 
 - Topic: `protonest/<devicename>/stream/fmc/pressure`
-- Unit: Pa (Pascals)
-- Normal Range: 95000 - 110000 Pa
+- Unit: bar
+- Normal Range: 1 - 6 bar
 - Payload Format:
   ```json
-  { "pressure": "101325" }
+  { "pressure": "4.5" }
   ```
-- Example: `protonest/demo/stream/fmc/pressure` → `{"pressure":"102000"}`
+- Example: `protonest/demo/stream/fmc/pressure` → `{"pressure":"4.2"}`
 
 **Temperature Sensor**
 
@@ -238,17 +238,7 @@ Result: 0-100 scale (≥75 Good, 50-74 Fair, <50 Poor)
 
 #### 3.3 Production Data
 
-**Unit Count**
-
-- Topic: `protonest/<devicename>/stream/fmc/units`
-- Unit: count (integer)
-- Payload Format:
-  ```json
-  { "units": "150" }
-  ```
-- Example: `protonest/demo/stream/fmc/units` → `{"units":"150"}`
-
-**Product Tracking (increments unit count)**
+**Product Tracking**
 
 - Topic: `protonest/<devicename>/stream/fmc/product`
 - Payload Format:
@@ -256,7 +246,40 @@ Result: 0-100 scale (≥75 Good, 50-74 Fair, <50 Poor)
   { "productID": "PROD-12345", "productName": "Widget A" }
   ```
 - Example: `protonest/demo/stream/fmc/product` → `{"productID":"PROD-001","productName":"Assembly Unit"}`
-- Note: Each product message increments the local unit count and logs to production history
+- Note: Each product message is stored and counted for unit tracking
+
+**⚠️ IMPORTANT: Unit Count Calculation**
+
+The dashboard does **NOT** use a direct `fmc/units` stream topic. Instead:
+
+1. **Firmware publishes** each product scan to `fmc/product` topic
+2. **Dashboard fetches** product records via HTTP API for the last 24 hours
+3. **Dashboard counts** the number of product records = **unit count**
+
+```
+Flow:
+  Firmware → MQTT (fmc/product) → Backend Storage
+  Dashboard → HTTP GET /user/get-stream-data/device/topic
+              (topic: "fmc/product", last 24hrs)
+            → count(products) = Units
+```
+
+**HTTP API Request Example:**
+
+```javascript
+POST /user/get-stream-data/device/topic
+Body: {
+  "deviceId": "devicetestuc",
+  "topic": "fmc/product",
+  "startTime": "2026-01-21T00:00:00Z",  // 24 hours ago
+  "endTime": "2026-01-22T00:00:00Z",    // now
+  "pagination": "0",
+  "pageSize": "10000"
+}
+
+// Response: array of product records
+// Units = response.data.length
+```
 
 ---
 
@@ -288,27 +311,114 @@ All state data (control commands) must be published in **JSON format**. Messages
 
 ### Available Control Topics
 
-#### 4.1 Machine Control
+#### 4.1 Machine Control ⚡
 
 **Topic**: `protonest/<devicename>/state/fmc/machineControl`
 
-**Subscribe to receive commands from dashboard**:
+**Purpose**: Control the machine status (RUN/STOP/IDLE) from the dashboard
 
-- Commands: RUN, STOP, IDLE
+**Direction**: Dashboard → Firmware (Firmware subscribes and receives commands)
 
-**Payload received from dashboard**:
+**Command Payloads**:
 
 ```json
+// Start the machine
 { "status": "RUN" }
-```
 
-or
-
-```json
+// Stop the machine
 { "status": "STOP" }
+
+// Set idle mode
+{ "status": "IDLE" }
 ```
 
-**Example**: `protonest/demo/state/fmc/machineControl` → Subscribe and publish `{"status":"RUN"}`
+**How It Works (Complete Flow)**:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        MACHINE CONTROL FLOW                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. User clicks "RUN" button on Dashboard                        │
+│                           │                                      │
+│                           ▼                                      │
+│  2. Dashboard calls HTTP API:                                    │
+│     POST /user/update-state-details                              │
+│     Body: {                                                      │
+│       "deviceId": "devicetestuc",                                │
+│       "topic": "fmc/machineControl",                             │
+│       "payload": {"status": "RUN"}                               │
+│     }                                                            │
+│                           │                                      │
+│                           ▼                                      │
+│  3. ProtoNest API publishes to MQTT:                             │
+│     Topic: protonest/devicetestuc/state/fmc/machineControl       │
+│     Payload: {"status": "RUN"}                                   │
+│                           │                                      │
+│                           ▼                                      │
+│  4. Firmware receives command (subscribed to state topics)       │
+│                           │                                      │
+│                           ▼                                      │
+│  5. Firmware executes: startMachine()                            │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Firmware Implementation Example**:
+
+```c
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  // Check if it's a machineControl command
+  if (strstr(topic, "machineControl")) {
+    StaticJsonDocument<200> doc;
+    deserializeJson(doc, payload, length);
+    const char* status = doc["status"];
+    
+    if (strcmp(status, "RUN") == 0) {
+      digitalWrite(MACHINE_RELAY_PIN, HIGH);
+      Serial.println("✅ Machine STARTED");
+    } else if (strcmp(status, "STOP") == 0) {
+      digitalWrite(MACHINE_RELAY_PIN, LOW);
+      Serial.println("🛑 Machine STOPPED");
+    } else if (strcmp(status, "IDLE") == 0) {
+      digitalWrite(MACHINE_RELAY_PIN, LOW);
+      Serial.println("⏸️ Machine set to IDLE");
+    }
+  }
+}
+```
+
+**Testing machineControl with MQTTX**:
+
+1. **Connect to MQTT Broker**:
+   - Host: `mqtt.protonest.co`
+   - Port: `8883` (SSL/TLS)
+   - Client ID: `devicetestuc` (your device ID)
+   - Load your certificates
+
+2. **Subscribe to state topics**:
+   ```
+   Topic: protonest/devicetestuc/state/fmc/#
+   QoS: 1
+   ```
+
+3. **Simulate RUN command (from dashboard)**:
+   ```
+   Topic: protonest/devicetestuc/state/fmc/machineControl
+   QoS: 1
+   Retain: true
+   Payload: {"status": "RUN"}
+   ```
+
+4. **Simulate STOP command**:
+   ```
+   Topic: protonest/devicetestuc/state/fmc/machineControl
+   QoS: 1
+   Retain: true
+   Payload: {"status": "STOP"}
+   ```
+
+5. **Verify**: Your firmware should log receiving the command and execute the action
 
 #### 4.2 Ventilation Control
 

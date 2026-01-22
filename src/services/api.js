@@ -133,7 +133,7 @@ api.interceptors.response.use(
     // Handle token refresh for 400/401 "Invalid token" errors (cookie-based refresh)
     if (
       (error.response?.status === 400 || error.response?.status === 401) &&
-      !originalRequest?.url?.includes("/get-token") &&
+      !originalRequest?.url?.includes("/user/get-token") &&
       (error.response?.data?.data === "Invalid token" ||
         error.response?.data?.message?.includes("token")) &&
       !originalRequest._retry
@@ -143,10 +143,10 @@ api.interceptors.response.use(
       try {
         console.log("🔄 Attempting cookie-based token refresh...");
 
-        // Cookie-based token refresh: GET /get-new-token
-        // Note: Base URL already includes /user, so endpoint is just /get-new-token
+        // Cookie-based token refresh: GET /user/get-new-token
+        // Base URL is /api/v1, endpoint includes /user/ prefix
         // Server reads refresh token from HttpOnly cookie and sets new JWT cookie
-        const response = await axios.get(`${BASE_URL}/get-new-token`, {
+        const response = await axios.get(`${BASE_URL}/user/get-new-token`, {
           withCredentials: true,
           timeout: 10000,
         });

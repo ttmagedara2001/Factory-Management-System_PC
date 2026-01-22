@@ -167,10 +167,10 @@ stompClient.activate();
 ### Base URL
 
 ```
-https://api.protonestconnect.co/api/v1/user
+https://api.protonestconnect.co/api/v1
 ```
 
-**Important**: All endpoints below are relative to the base URL.
+**Note**: All endpoints include the `/user/` prefix (e.g., `/user/get-token`, `/user/get-stream-data/device`).
 
 ### Authentication
 
@@ -418,7 +418,7 @@ const handleVentilationToggle = async () => {
 **Solutions**:
 - Cookies may have expired - try refreshing token
 - Check that `withCredentials: true` is set in axios
-- Verify the endpoint path is correct (no `/user/` prefix if base URL includes it)
+- Verify the endpoint path includes `/user/` prefix (base URL is /api/v1, endpoints are /user/...)
 
 ### WebSocket Issues
 
@@ -451,16 +451,17 @@ const handleVentilationToggle = async () => {
 
 ```env
 # .env file
-VITE_API_BASE_URL = https://api.protonestconnect.co/api/v1/user
+VITE_API_BASE_URL = https://api.protonestconnect.co/api/v1
 VITE_WS_URL = wss://api.protonestconnect.co/ws
 VITE_AUTH_EMAIL = your-email@example.com
 VITE_AUTH_SECRET_KEY = your-secret-key-from-protonest
 VITE_DEVICE_ID = devicetestuc
 ```
 
-**Note**: Endpoints in code do NOT include `/user/` prefix since base URL already includes it:
-- ✓ `/get-token` (correct)
-- ✗ `/user/get-token` (incorrect - would result in `/user/user/get-token`)
+**Note**: Base URL is `/api/v1` (without `/user`). All endpoints INCLUDE the `/user/` prefix:
+- ✓ `/user/get-token` (correct)
+- ✓ `/user/get-stream-data/device/topic` (correct)
+- ✓ `/user/update-state-details` (correct)
 
 ---
 

@@ -4,80 +4,12 @@ import App from './App.jsx';
 import './index.css';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from './Context/AuthContext.jsx';
-import { login } from "./services/authService.js";
+import { autoLogin, getMissingEnvVars } from "./services/authService.js";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CACHE SAFETY: Validate environment variables before any cache operations
-// This prevents infinite reset loops during configuration issues
-// ═══════════════════════════════════════════════════════════════════════════
-const validateEnvironmentConfig = () => {
-  const email = import.meta.env.VITE_AUTH_EMAIL;
-  const password = import.meta.env.VITE_AUTH_SECRET_KEY;
-  const apiUrl = import.meta.env.VITE_API_BASE_URL;
-  const wsUrl = import.meta.env.VITE_WS_URL;
-
-  const missingVars = [];
-  if (!email) missingVars.push('VITE_AUTH_EMAIL');
-  if (!password) missingVars.push('VITE_AUTH_SECRET_KEY');
-  if (!apiUrl) missingVars.push('VITE_API_BASE_URL');
-  if (!wsUrl) missingVars.push('VITE_WS_URL');
-
-  if (missingVars.length > 0) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ ENVIRONMENT CONFIGURATION ERROR');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('Missing environment variables:', missingVars.join(', '));
-    console.error('\n💡 TO FIX THIS:');
-    console.error('   1. Create a .env file in the project root');
-    console.error('   2. Add the required variables (see .env.example)');
-    console.error('   3. Restart the development server\n');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    return false;
-  }
-
-  return true;
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// CACHE VALIDATION: Only clear cache if environment is properly configured
-// ═══════════════════════════════════════════════════════════════════════════
-const validateCachedData = () => {
-  // Don't trigger cache operations if env vars aren't configured
-  if (!validateEnvironmentConfig()) {
-    console.warn('⚠️ Skipping cache validation due to missing environment config');
-    return;
-  }
-
-  try {
-    // Validate selectedDevice exists and matches available devices
-    const selectedDevice = localStorage.getItem('selectedDevice');
-    if (selectedDevice) {
-      // Basic validation - device ID should be a non-empty string
-      if (typeof selectedDevice !== 'string' || selectedDevice.trim() === '') {
-        console.warn('⚠️ Invalid selectedDevice in cache, clearing...');
-        localStorage.removeItem('selectedDevice');
-      }
-    }
-
-    // Validate JWT token format (basic check)
-    const jwtToken = localStorage.getItem('jwtToken');
-    if (jwtToken && jwtToken.length < 20) {
-      console.warn('⚠️ Invalid JWT token in cache, clearing...');
-      localStorage.removeItem('jwtToken');
-    }
-
-  } catch (error) {
-    console.error('Error validating cache:', error);
-  }
-};
-
-// Run cache validation on startup
-validateCachedData();
-
-// ✅ Auto-login credentials from environment variables
-const email = import.meta.env.VITE_AUTH_EMAIL;
-const password = import.meta.env.VITE_AUTH_SECRET_KEY;
-
+/**
+ * AutoLogin Component
+ * Handles automatic authentication on app startup using authService
+ */
 const AutoLogin = ({ children }) => {
   const { setAuth } = useAuth();
   const [loginAttempted, setLoginAttempted] = React.useState(false);
@@ -86,61 +18,33 @@ const AutoLogin = ({ children }) => {
 
   React.useEffect(() => {
     if (loginAttempted) return;
-
     setLoginAttempted(true);
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // CACHE SAFETY: Check if env vars are defined before attempting login
-    // ═══════════════════════════════════════════════════════════════════════
-    if (!email || !password) {
-      console.error('❌ Cannot auto-login: Missing VITE_AUTH_EMAIL or VITE_AUTH_SECRET_KEY');
-      setEnvError('Missing authentication credentials in environment configuration');
-      setIsLoading(false);
-      return;
-    }
+    const performAutoLogin = async () => {
+      const result = await autoLogin();
 
-    const performLogin = async () => {
-      try {
-        console.log("🔑 Attempting auto login...");
-        console.log("📧 Email:", email);
-        console.log("🔐 SecretKey length:", password.length);
-
-        const authData = await login(email, password);
-
-        console.log("✅ Auto login successful. Ready for connection.");
-
-        // Store JWT token in localStorage
-        try { localStorage.setItem('jwtToken', authData.jwtToken); } catch (e) { console.warn('Failed to persist jwtToken', e); }
-
-        // Store in AuthContext
-        setAuth({ userId: authData.userId || email, jwtToken: authData.jwtToken });
-
-        if (authData.refreshToken) {
-          try { localStorage.setItem('refreshToken', authData.refreshToken); } catch (e) { console.warn('Failed to persist refreshToken', e); }
+      if (result.success) {
+        setAuth({
+          userId: result.userId,
+          jwtToken: result.jwtToken
+        });
+      } else {
+        // Check if it's an environment configuration error
+        if (result.missingVars && result.missingVars.length > 0) {
+          setEnvError(result.error);
         }
-
-      } catch (error) {
-        console.error("❌ Auto login failed. Cannot connect to services.");
-        console.error("Auto login error details:", error.message);
-
-        if (error.message.includes("Invalid credentials")) {
-          console.error("🔧 Credentials may be incorrect or expired. Please verify from Protonest dashboard");
-        }
-
-        // Clear any existing tokens from localStorage
-        try { localStorage.removeItem('jwtToken'); localStorage.removeItem('refreshToken'); } catch (e) { console.warn('Failed to remove tokens', e); }
-
         setAuth({ userId: null, jwtToken: null });
-      } finally {
-        setIsLoading(false);
       }
+
+      setIsLoading(false);
     };
 
-    performLogin();
+    performAutoLogin();
   }, [setAuth, loginAttempted]);
 
   // Show environment configuration error
   if (envError) {
+    const missingVars = getMissingEnvVars();
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
         <div className="text-center max-w-md px-6">
@@ -152,12 +56,9 @@ const AutoLogin = ({ children }) => {
           <h2 className="text-lg font-bold text-slate-800 mb-2">Configuration Error</h2>
           <p className="text-sm text-slate-600 mb-4">{envError}</p>
           <div className="bg-slate-50 rounded-lg p-4 text-left">
-            <p className="text-xs font-semibold text-slate-700 mb-2">Required environment variables:</p>
+            <p className="text-xs font-semibold text-slate-700 mb-2">Missing environment variables:</p>
             <ul className="text-xs text-slate-600 space-y-1 font-mono">
-              <li>VITE_AUTH_EMAIL</li>
-              <li>VITE_AUTH_SECRET_KEY</li>
-              <li>VITE_API_BASE_URL</li>
-              <li>VITE_WS_URL</li>
+              {missingVars.map(v => <li key={v}>{v}</li>)}
             </ul>
           </div>
         </div>

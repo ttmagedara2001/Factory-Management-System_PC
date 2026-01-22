@@ -154,10 +154,16 @@ export const resetUnits = (deviceId) => {
 
 /**
  * Set units from backend value (used on WebSocket connection)
+ * 
+ * NOTE: Units are now calculated by counting products from the last 24 hours.
+ * The backend value comes from deviceService.getCurrentUnitsFromBackend()
+ * which fetches products via HTTP API and counts them.
+ * 
  * This initializes or updates the local count with the backend's authoritative value.
  * Only updates if the backend value is greater than local (to not lose local increments).
+ * 
  * @param {string} deviceId - Device ID
- * @param {number} backendUnits - Unit count from backend
+ * @param {number} backendUnits - Unit count from backend (product count in 24hrs)
  * @returns {number} The set unit count
  */
 export const setUnitsFromBackend = (deviceId, backendUnits) => {
@@ -169,7 +175,7 @@ export const setUnitsFromBackend = (deviceId, backendUnits) => {
     data.units = backendUnits;
     saveProductionData(deviceId, data);
     console.log(
-      `📥 [ProductionService] Set units from backend: ${backendUnits} for ${deviceId}`
+      `📥 [ProductionService] Set units from product count: ${backendUnits} for ${deviceId}`
     );
     return backendUnits;
   } else {
