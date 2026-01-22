@@ -143,9 +143,10 @@ api.interceptors.response.use(
       try {
         console.log("🔄 Attempting cookie-based token refresh...");
 
-        // Cookie-based token refresh: GET /user/get-new-token
+        // Cookie-based token refresh: GET /get-new-token
+        // Note: Base URL already includes /user, so endpoint is just /get-new-token
         // Server reads refresh token from HttpOnly cookie and sets new JWT cookie
-        const response = await axios.get(`${BASE_URL}/user/get-new-token`, {
+        const response = await axios.get(`${BASE_URL}/get-new-token`, {
           withCredentials: true,
           timeout: 10000,
         });

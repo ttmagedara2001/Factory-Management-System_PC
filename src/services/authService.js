@@ -44,13 +44,13 @@ export const login = async (email, password) => {
       // ═══════════════════════════════════════════════════════════════════════
       // COOKIE-BASED AUTH: Use fetch with credentials: 'include'
       // This allows the browser to receive and store HttpOnly cookies
+      // Note: Base URL already includes /user, so endpoint is just /get-token
       // ═══════════════════════════════════════════════════════════════════════
       const response = await fetch(`${API_URL}/user/get-token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Cache-Control': 'no-cache',
         },
         credentials: 'include', // ⭐ REQUIRED for HttpOnly cookies
         body: JSON.stringify({

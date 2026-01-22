@@ -92,7 +92,7 @@ export const getStreamDataForDevice = async (
     );
     console.log(`⏰ [HTTP API] Time range: ${startTime} to ${endTime}`);
 
-    const response = await api.post("/user/get-stream-data/device", {
+    const response = await api.post("/get-stream-data/device", {
       deviceId,
       startTime,
       endTime,
@@ -118,7 +118,7 @@ export const getStreamDataForDevice = async (
       status: error.response?.status,
       statusText: error.response?.statusText,
       message: error.message,
-      endpoint: "/user/get-stream-data/device",
+      endpoint: "/get-stream-data/device",
     });
     throw error;
   }
@@ -152,7 +152,7 @@ export const getStateDetailsForDevice = async (deviceId) => {
   try {
     console.log(`🎛️ [HTTP API] Fetching state details for ${deviceId}`);
 
-    const response = await api.post("/user/get-state-details/device", {
+    const response = await api.post("/get-state-details/device", {
       deviceId,
     });
 
@@ -171,7 +171,7 @@ export const getStateDetailsForDevice = async (deviceId) => {
         status: error.response?.status,
         statusText: error.response?.statusText,
         message: error.message,
-        endpoint: "/user/get-state-details/device",
+        endpoint: "/get-state-details/device",
       }
     );
     throw error;

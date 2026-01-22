@@ -198,16 +198,21 @@ All sensor data must be published in **JSON format**. The message will have **Qo
 
 #### 3.2 Air Quality Sensors
 
-**Air Quality Index (AQI)**
+**Air Quality Index (AQI)** - *Calculated Client-Side*
 
-- Topic: `protonest/<devicename>/stream/fmc/aqi`
-- Unit: AQI units (0-500 scale)
-- Normal Range: 0 - 100 (Good to Moderate)
-- Payload Format:
-  ```json
-  { "aqi": "42" }
-  ```
-- Example: `protonest/demo/stream/fmc/aqi` → `{"aqi":"35"}`
+Note: AQI is NOT sent by the device. It is automatically calculated by the dashboard based on temperature, humidity, and CO2 values:
+
+```javascript
+// Dashboard calculation formula
+AQI = (TempScore × 0.30) + (HumidityScore × 0.30) + (CO2Score × 0.40)
+```
+
+Where:
+- TempScore: 100 points in 20-25°C range, -5 pts per °C deviation
+- HumidityScore: 100 points in 40-60% range, -2 pts per % deviation  
+- CO2Score: 100 points if <45%, gradual decrease above
+
+Result: 0-100 scale (≥75 Good, 50-74 Fair, <50 Poor)
 
 **PM2.5 (Particulate Matter)**
 
@@ -311,15 +316,55 @@ or
 
 **Subscribe to receive commands from dashboard**:
 
-- Modes: auto, manual, off
+The dashboard sends ventilation commands via HTTP API (`POST /update-state-details`), which are forwarded to the device via MQTT.
 
-**Payload received from dashboard**:
+**Payload format received from dashboard**:
 
 ```json
-{ "mode": "auto" }
+{
+  "ventilation": "on",
+  "mode": "manual",
+  "timestamp": "2026-01-22T10:12:30Z"
+}
 ```
 
-**Example**: `protonest/demo/state/fmc/ventilation` → Subscribe and publish `{"mode":"manual"}`
+**Possible values**:
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `ventilation` | `"on"`, `"off"`, `"auto"` | Ventilation state |
+| `mode` | `"manual"`, `"auto"` | Control mode |
+| `timestamp` | ISO-8601 string | Command timestamp |
+
+**Example Commands**:
+
+```json
+// Turn ventilation ON (manual mode)
+{"ventilation": "on", "mode": "manual", "timestamp": "2026-01-22T10:12:30Z"}
+
+// Turn ventilation OFF
+{"ventilation": "off", "mode": "manual", "timestamp": "2026-01-22T10:12:45Z"}
+
+// Set to AUTO mode (device controls based on sensors)
+{"ventilation": "auto", "mode": "auto", "timestamp": "2026-01-22T10:13:00Z"}
+```
+
+**Firmware handling example**:
+
+```c
+void handleVentilation(const char* ventilation, const char* mode) {
+  if (strcmp(mode, "auto") == 0) {
+    enableAutoVentilation();
+  } else {
+    disableAutoVentilation();
+    if (strcmp(ventilation, "on") == 0) {
+      turnVentilationOn();
+    } else {
+      turnVentilationOff();
+    }
+  }
+}
+```
 
 #### 4.3 Emergency Stop
 
@@ -915,8 +960,8 @@ Example: `{"state":"ON"}`, `{"status":"RUN"}`
 
 ---
 
-**Last Updated**: January 6, 2026  
-**Version**: 3.0  
-**Compatible with**: Factory Management System v2.0  
+**Last Updated**: January 22, 2026  
+**Version**: 4.0  
+**Compatible with**: Factory Management System v3.0 (Cookie-based Auth)  
 **MQTT Broker**: mqtt.protonest.co (Port 8883, SSL/TLS)  
 **WebSocket**: wss://api.protonestconnect.co/ws
