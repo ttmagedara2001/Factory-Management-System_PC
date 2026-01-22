@@ -316,13 +316,16 @@ export default function App() {
     setFactoryStatus('STOPPED');
 
     try {
+      // Send STOP command via WebSocket if available
       if (webSocketClient?.sendMachineControlCommand) {
-        webSocketClient.sendMachineControlCommand('EMERGENCY_STOP');
+        webSocketClient.sendMachineControlCommand('STOP');
       }
 
+      // Send critical STOP command via HTTP API with correct payload
       const { updateStateDetails } = await import('./services/deviceService.js');
       await updateStateDetails(selectedDevice, 'machineControl', {
-        machineControl: 'EMERGENCY_STOP',
+        status: 'STOP',
+        reason: 'EMERGENCY STOP',
         timestamp: new Date().toISOString()
       });
 

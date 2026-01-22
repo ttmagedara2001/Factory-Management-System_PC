@@ -245,6 +245,130 @@ export const updateStateDetails = async (deviceId, topic, payload) => {
 };
 
 // ============================================
+// MACHINE CONTROL API FUNCTIONS
+// ============================================
+
+/**
+ * Send machine control command (RUN/STOP/IDLE) via HTTP API
+ *
+ * This sends a command to the machineControl state topic.
+ * The backend receives this and publishes to MQTT for the device.
+ *
+ * Flow:
+ *   Dashboard → HTTP POST /update-state-details → Backend → MQTT → Firmware
+ *
+ * MQTTX Testing:
+ *   Topic: protonest/<deviceId>/state/fmc/machineControl
+ *   Payload: {"status": "RUN"}
+ *
+ * @param {string} deviceId - Factory device ID (e.g., "devicetestuc")
+ * @param {string} command - Machine command: "RUN", "STOP", or "IDLE"
+ * @returns {Promise<Object>} Response from API
+ *
+ * @example
+ * // Start the machine
+ * await sendMachineCommand("devicetestuc", "RUN");
+ *
+ * // Stop the machine
+ * await sendMachineCommand("devicetestuc", "STOP");
+ *
+ * // Set machine to idle
+ * await sendMachineCommand("devicetestuc", "IDLE");
+ */
+export const sendMachineCommand = async (deviceId, command) => {
+  // Validate command
+  const validCommands = ["RUN", "STOP", "IDLE"];
+  const normalizedCommand = command?.toUpperCase();
+
+  if (!validCommands.includes(normalizedCommand)) {
+    console.error(
+      `❌ [Machine Control] Invalid command: ${command}. Valid commands: ${validCommands.join(", ")}`
+    );
+    throw new Error(`Invalid machine command: ${command}`);
+  }
+
+  if (!deviceId) {
+    console.error("❌ [Machine Control] Device ID is required");
+    throw new Error("Device ID is required for machine control");
+  }
+
+  console.log(`⚙️ [Machine Control] Sending ${normalizedCommand} command to ${deviceId}`);
+
+  try {
+    // Use updateStateDetails with machineControl topic
+    const payload = {
+      status: normalizedCommand,
+      timestamp: new Date().toISOString(),
+    };
+
+    const response = await updateStateDetails(deviceId, "machineControl", payload);
+
+    console.log(`✅ [Machine Control] Command ${normalizedCommand} sent successfully to ${deviceId}`);
+
+    return response;
+  } catch (error) {
+    console.error(
+      `❌ [Machine Control] Failed to send ${normalizedCommand} to ${deviceId}:`,
+      {
+        status: error.response?.status,
+        message: error.message,
+      }
+    );
+    throw error;
+  }
+};
+
+/**
+ * Send ventilation control command (ON/OFF/AUTO) via HTTP API
+ *
+ * @param {string} deviceId - Factory device ID
+ * @param {string} state - "on", "off"
+ * @param {string} mode - "manual" or "auto"
+ * @returns {Promise<Object>} Response from API
+ */
+export const sendVentilationCommand = async (deviceId, state, mode = "manual") => {
+  const validStates = ["on", "off"];
+  const normalizedState = state?.toLowerCase();
+
+  if (!validStates.includes(normalizedState)) {
+    console.error(
+      `❌ [Ventilation] Invalid state: ${state}. Valid states: ${validStates.join(", ")}`
+    );
+    throw new Error(`Invalid ventilation state: ${state}`);
+  }
+
+  if (!deviceId) {
+    console.error("❌ [Ventilation] Device ID is required");
+    throw new Error("Device ID is required for ventilation control");
+  }
+
+  console.log(`🌀 [Ventilation] Sending ${normalizedState} command to ${deviceId} (mode: ${mode})`);
+
+  try {
+    const payload = {
+      ventilation: normalizedState,
+      mode: mode,
+      timestamp: new Date().toISOString(),
+    };
+
+    const response = await updateStateDetails(deviceId, "ventilation", payload);
+
+    console.log(`✅ [Ventilation] Command ${normalizedState} sent successfully to ${deviceId}`);
+
+    return response;
+  } catch (error) {
+    console.error(
+      `❌ [Ventilation] Failed to send ${normalizedState} to ${deviceId}:`,
+      {
+        status: error.response?.status,
+        message: error.message,
+      }
+    );
+    throw error;
+  }
+};
+
+// ============================================
 // TOPIC-SPECIFIC API FUNCTIONS
 // ============================================
 // These functions query individual sensor topics rather than all topics at once

@@ -141,6 +141,10 @@ const SettingsWindow = ({
     setControlMode(mode);
   };
 
+  /* 
+   * Machine Control Handler
+   * Sends RUN/STOP commands via HTTP API (updateStateDetails)
+   */
   const handleMachineToggle = async () => {
     if (controlMode === 'manual' && selectedDevice) {
       const newStatus = machineStatus === 'running' ? 'stopped' : 'running';
@@ -149,28 +153,18 @@ const SettingsWindow = ({
       setIsSendingCommand(true);
 
       try {
-        // Try WebSocket first
-        let success = false;
-        if (webSocketClient?.sendMachineControlCommand) {
-          success = webSocketClient.sendMachineControlCommand(command);
-        }
+        console.log(`⚙️ [Settings] Sending ${command} command to ${selectedDevice}...`);
 
-        // If WebSocket fails, fallback to HTTP API
-        if (!success) {
-          console.log(`[Settings] WebSocket failed, trying HTTP API fallback...`);
-          await updateStateDetails(selectedDevice, 'machineControl', {
-            machineControl: command.toLowerCase(),
-            timestamp: new Date().toISOString()
-          });
-          success = true;
-          console.log(`✅ [Settings] Machine command sent via HTTP API to ${selectedDevice}: ${command}`);
-        } else {
-          console.log(`✅ [Settings] Machine command sent via WebSocket to ${selectedDevice}: ${command}`);
-        }
+        // Always use HTTP API for state updates to ensure consistency
+        // Payload structure: { status: "RUN/STOP", timestamp: ... }
+        await updateStateDetails(selectedDevice, 'machineControl', {
+          status: command, // Corrected from 'machineControl' to 'status'
+          timestamp: new Date().toISOString()
+        });
 
-        if (success) {
-          setMachineStatus(newStatus);
-        }
+        console.log(`✅ [Settings] Machine command sent: ${command}`);
+        setMachineStatus(newStatus);
+
       } catch (error) {
         console.error('❌ [Settings] Failed to send machine command:', error);
         alert('Failed to send machine control command. Please check your connection.');
@@ -179,6 +173,81 @@ const SettingsWindow = ({
       }
     }
   };
+
+  /*
+   * Auto-Stop Monitor
+   * Automatically stops machine if critical thresholds are exceeded in AUTO mode
+   */
+  useEffect(() => {
+    if (controlMode === 'auto' && machineStatus === 'running' && !isEmergencyStopped && selectedDevice) {
+      const checkCriticalValues = async () => {
+        let criticalTriggered = false;
+        let reason = '';
+
+        // Check Vibration
+        if (currentValues.vibration && localThresholds.vibration.critical &&
+          Number(currentValues.vibration) >= localThresholds.vibration.critical) {
+          criticalTriggered = true;
+          reason = `High Vibration (${currentValues.vibration} mm/s)`;
+        }
+
+        // Check Temperature
+        else if (currentValues.temperature && localThresholds.temperature.max &&
+          Number(currentValues.temperature) >= localThresholds.temperature.max) {
+          criticalTriggered = true;
+          reason = `High Temperature (${currentValues.temperature}°C)`;
+        }
+
+        // Check Pressure
+        else if (currentValues.pressure) {
+          if (localThresholds.pressure.max && Number(currentValues.pressure) >= localThresholds.pressure.max) {
+            criticalTriggered = true;
+            reason = `High Pressure (${currentValues.pressure} bar)`;
+          } else if (localThresholds.pressure.min && Number(currentValues.pressure) <= localThresholds.pressure.min) {
+            criticalTriggered = true;
+            reason = `Low Pressure (${currentValues.pressure} bar)`;
+          }
+        }
+
+        // Check Noise
+        else if (currentValues.noise && localThresholds.noise.critical &&
+          Number(currentValues.noise) >= localThresholds.noise.critical) {
+          criticalTriggered = true;
+          reason = `High Noise Level (${currentValues.noise} dB)`;
+        }
+
+        // Execute Auto-Stop
+        if (criticalTriggered) {
+          console.warn(`🚨 [Auto-Control] Critical condition detected: ${reason}. Stopping machine.`);
+
+          try {
+            // 1. Send STOP command
+            await updateStateDetails(selectedDevice, 'machineControl', {
+              status: 'STOP',
+              reason: `Auto-stop: ${reason}`,
+              timestamp: new Date().toISOString()
+            });
+
+            // 2. Update local state
+            setMachineStatus('stopped');
+
+            // 3. Switch to MANUAL mode to prevent auto-restart
+            setControlMode('manual');
+
+            // 4. Alert user
+            alert(`⚠️ CRITICAL SAFETY STOP ⚠️\n\nMachine stopped automatically.\nReason: ${reason}\n\nSystem switched to MANUAL mode.`);
+
+          } catch (error) {
+            console.error('❌ [Auto-Control] Failed to execute auto-stop:', error);
+          }
+        }
+      };
+
+      // Debounce check to avoid reacting to transient spikes
+      const timer = setTimeout(checkCriticalValues, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [controlMode, machineStatus, currentValues, localThresholds, isEmergencyStopped, selectedDevice]);
 
   /**
    * Get status for a sensor value based on thresholds
