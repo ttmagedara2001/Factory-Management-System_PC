@@ -133,7 +133,7 @@ api.interceptors.response.use(
     // Handle token refresh for 400/401 "Invalid token" errors (cookie-based refresh)
     if (
       (error.response?.status === 400 || error.response?.status === 401) &&
-      !originalRequest?.url?.includes("/user/get-token") &&
+      !originalRequest?.url?.includes("/get-token") &&
       (error.response?.data?.data === "Invalid token" ||
         error.response?.data?.message?.includes("token")) &&
       !originalRequest._retry
@@ -143,10 +143,10 @@ api.interceptors.response.use(
       try {
         console.log("🔄 Attempting cookie-based token refresh...");
 
-        // Cookie-based token refresh: GET /user/get-new-token
-        // Base URL is /api/v1, endpoint includes /user/ prefix
+        // Cookie-based token refresh: GET /get-new-token
+        // Base URL is /api/v1
         // Server reads refresh token from HttpOnly cookie and sets new JWT cookie
-        const response = await axios.get(`${BASE_URL}/user/get-new-token`, {
+        const response = await axios.get(`${BASE_URL}/get-new-token`, {
           withCredentials: true,
           timeout: 10000,
         });
@@ -158,8 +158,9 @@ api.interceptors.response.use(
         }
       } catch (refreshError) {
         console.error("❌ Token refresh failed:", refreshError.message);
-        // Clear any local state and redirect to login
+        // Clear any local state and session flag to force re-login
         localStorage.clear();
+        sessionStorage.removeItem('factory_session_authenticated');
         window.location.href = "/";
       }
     }

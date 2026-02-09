@@ -10,30 +10,27 @@ This is a **React/Vite** web application for monitoring and controlling factory 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        APPLICATION STARTUP                          │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
 │  1. AUTHENTICATION (main.jsx - AutoLogin Component)                 │
-│     ┌─────────────────────────────────────────────────────────────┐ │
-│     │ POST /api/v1/user/get-token                                 │ │
-│     │ Body: { email, password (secretKey) }                       │ │
-│     │ Response: { jwtToken, refreshToken }                        │ │
-│     └─────────────────────────────────────────────────────────────┘ │
-│     - Stores jwtToken & refreshToken in localStorage                │
+│     ┌───────────────────────────────────────────────────────────┐ │
+│     │ POST /api/v1/get-token                                    │ │
+│     │ Body: { email, password (secretKey) }                     │ │
+│     │ Response: HttpOnly cookies set automatically              │ │
+│     └───────────────────────────────────────────────────────────┘ │
+│     - Uses credentials: 'include' for HttpOnly cookies              │
 │     - Updates AuthContext with user credentials                     │
+│     - Only renders App on successful authentication                 │
 └─────────────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  2. WEBSOCKET CONNECTION (App.jsx)                                  │
-│     ┌─────────────────────────────────────────────────────────────┐ │
-│     │ wss://api.protonestconnect.co/ws?token=<jwtToken>           │ │
-│     │ Protocol: STOMP over WebSocket                              │ │
-│     └─────────────────────────────────────────────────────────────┘ │
-│     - Establishes persistent connection for real-time data         │
-│     - Subscribes to device sensor topics                           │
+│     ┌───────────────────────────────────────────────────────────┐ │
+│     │ wss://api.protonestconnect.co/ws                          │ │
+│     │ Protocol: STOMP over WebSocket                            │ │
+│     │ Authentication: HttpOnly cookies (automatic)              │ │
+│     └───────────────────────────────────────────────────────────┘ │
+│     - Subscribes to /topic/stream/<deviceId>                        │
+│     - Subscribes to /topic/state/<deviceId>                         │
 └─────────────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
@@ -139,20 +136,21 @@ All HTTP requests are now centralized:
 1. APP STARTUP
    └──▸ AutoLogin Component (main.jsx)
         └──▸ POST /get-token { email, secretKey }
-             └──▸ Store { jwtToken, refreshToken } in localStorage
+             └──▸ Server sets HttpOnly cookies
                   └──▸ Update AuthContext
+                       └──▸ Render App component
 
 2. API REQUESTS (Automatic via Interceptor)
-   └──▸ axios request interceptor adds X-Token header
-        └──▸ If 401 error with "Invalid token":
-             └──▸ POST /get-new-token (X-Refresh-Token header)
-                  └──▸ Update jwtToken in localStorage
-                       └──▸ Retry original request
-                            └──▸ If refresh fails: logout & redirect
+   └──▸ Cookies sent automatically (withCredentials: true)
+        └──▸ If 401/400 error with "Invalid token":
+             └──▸ GET /get-new-token (cookies refreshed)
+                  └──▸ Retry original request
+                       └──▸ If refresh fails: logout & redirect
 
 3. WEBSOCKET CONNECTION
-   └──▸ wss://api.protonestconnect.co/ws?token=<jwtToken>
-        └──▸ STOMP client with auto-reconnect
+   └──▸ wss://api.protonestconnect.co/ws
+        └──▸ Cookies sent automatically
+             └──▸ STOMP client subscribes to topics
 ```
 
 ---
@@ -165,11 +163,9 @@ IoT Device ──▸ MQTT Broker ──▸ Backend ──▸ WebSocket ──▸
                                               │
                     ┌─────────────────────────┴─────────────────────────┐
                     │              STOMP Topics                          │
-                    │  • /topic/stream/{deviceId}                       │
-                    │  • /topic/state/{deviceId}                        │
-                    │  • protonest/{deviceId}/stream/fmc/{sensor}       │
-                    │  • protonest/{deviceId}/state/fmc/{control}       │
-                    └───────────────────────────────────────────────────┘
+                    │  • /topic/stream/{deviceId}  (sensor data)         │
+                    │  • /topic/state/{deviceId}   (control state)       │
+                    └────────────────────────────────────────────────────┘
 ```
 
 ### Historical Data (HTTP)
@@ -210,17 +206,22 @@ ReactDOM.createRoot(...)
 
 // 2. AutoLogin performs auto-login
 login(email, secretKey) 
-  └── POST /get-token
-       └── localStorage.setItem('jwtToken', ...)
-            └── setAuth({ userId, jwtToken })
+  └── POST /get-token (uses fetch with credentials: 'include')
+       └── HttpOnly cookies set by server
+            └── setAuth({ userId })
+                 └── setIsAuthenticated(true)
 
-// 3. App.jsx initializes WebSocket
+// 3. App.jsx initializes WebSocket (after auth success)
 useEffect(() => {
-  webSocketClient.connect(jwtToken)
+  webSocketClient.connect() // cookies sent automatically
     .then(() => webSocketClient.subscribeToDevice(deviceId))
 })
 
-// 4. Real-time data flows in
+// 4. WebSocket subscribes to device topics
+// - /topic/stream/<deviceId>
+// - /topic/state/<deviceId>
+
+// 5. Real-time data flows in
 webSocketClient.subscribeToDevice(deviceId, (data) => {
   setSensorData(prev => ({ ...prev, [data.sensorType]: data.value }))
 })
@@ -271,7 +272,8 @@ proxy: {
 
 ### WebSocket URL (webSocketClient.js)
 ```javascript
-const wsUrl = `wss://api.protonestconnect.co/ws?token=${encodedToken}`;
+const wsUrl = 'wss://api.protonestconnect.co/ws';
+// No token in URL - uses HttpOnly cookies
 ```
 
 ---
@@ -302,4 +304,4 @@ npm run build
 
 ---
 
-*Last Updated: January 2026*
+*Last Updated: February 2026*

@@ -12,7 +12,6 @@ import {
 } from '../services/historicalDataService';
 
 
-
 const HistoricalWindow = ({
   alerts = [],
   setAlerts,
@@ -24,7 +23,8 @@ const HistoricalWindow = ({
   targetUnits = 1024,
   thresholds = {},
   currentUnits = 0,
-  hideTitle = false // New prop for embedding in larger layouts
+  hideTitle = false, // New prop for embedding in larger layouts
+  products24h = { count: 0, products: [] } // Products fetched from backend
 }) => {
   const [dateRange, setDateRange] = useState('24h');
   const [granularity, setGranularity] = useState('hourly');
@@ -766,6 +766,54 @@ const HistoricalWindow = ({
             </table>
           </div>
         </div>
+      </div>
+
+      {/* Products in Last 24 Hours Section */}
+      <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-blue-50 rounded-lg">
+              <TrendingUp size={16} className="text-blue-600" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-800 uppercase">Products in Last 24 Hours</h3>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+              {products24h.count} items
+            </span>
+          </div>
+        </div>
+
+        {products24h.products.length > 0 ? (
+          <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+            <table className="w-full text-[11px]">
+              <thead className="bg-slate-100 text-slate-700 font-bold uppercase sticky top-0">
+                <tr>
+                  <th className="p-2 text-left">#</th>
+                  <th className="p-2 text-left">Product ID</th>
+                  <th className="p-2 text-left">Product Name</th>
+                  <th className="p-2 text-left">Date</th>
+                  <th className="p-2 text-left">Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {products24h.products.map((product, i) => (
+                  <tr key={i} className="hover:bg-slate-50">
+                    <td className="p-2 text-slate-500 font-medium">{product.id || i + 1}</td>
+                    <td className="p-2 text-slate-700 font-semibold font-mono">{product.productID}</td>
+                    <td className="p-2 text-slate-600">{product.productName}</td>
+                    <td className="p-2 text-slate-500">{product.date}</td>
+                    <td className="p-2 text-slate-500">{product.time}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="h-[150px] flex flex-col items-center justify-center text-slate-400">
+            <Database size={32} className="mb-2 opacity-50" />
+            <p className="text-sm font-medium">No products recorded in last 24 hours</p>
+            <p className="text-xs mt-1">Products will appear here when detected by the device</p>
+          </div>
+        )}
       </div>
 
       {/* Export Dialog Modal */}

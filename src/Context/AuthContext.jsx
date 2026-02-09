@@ -4,8 +4,8 @@ import React, { createContext, useContext, useState } from 'react';
 const AuthContext = createContext({
   userId: '',
   jwtToken: '',
-  setAuth: () => {},
-  logout: () => {}, 
+  setAuth: () => { },
+  logout: () => { },
 });
 
 // 2. Created a Custom Hook for easy access in components
@@ -38,6 +38,8 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('jwtToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('userId');
+      // Clear session authentication flag to require re-login
+      sessionStorage.removeItem('factory_session_authenticated');
     } catch (e) {
       console.warn('AuthContext: failed to clear localStorage', e);
     }

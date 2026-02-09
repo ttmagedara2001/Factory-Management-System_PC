@@ -55,6 +55,39 @@ export const getMissingEnvVars = () => {
 };
 
 /**
+ * Check if user is already authenticated via cookies
+ * Makes a lightweight API call to validate existing session
+ * 
+ * @returns {Promise<boolean>} True if session is valid
+ */
+export const isAuthenticated = async () => {
+  try {
+    // Try to refresh the token - if it works, we're authenticated
+    // GET /get-new-token reads refresh cookie and issues new JWT cookie
+    const response = await fetch(`${API_URL}/get-new-token`, {
+      method: 'GET',
+      credentials: 'include', // Send cookies
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json().catch(() => ({}));
+      if (data.status === 'Success') {
+        console.log('🍪 [Auth] Existing cookies validated successfully');
+        return true;
+      }
+    }
+
+    return false;
+  } catch (error) {
+    console.log('ℹ️ [Auth] No valid session cookies found');
+    return false;
+  }
+};
+
+/**
  * Login and authenticate with the Protonest API
  * Uses fetch with credentials: 'include' to handle HttpOnly cookies
  * 
@@ -80,7 +113,7 @@ export const login = async (email, password) => {
     console.log("🔄 Making secure authentication request to:", API_URL);
     console.log("📋 IMPORTANT: Using secretKey as password (not login password)");
 
-    console.log("🔄 Attempting /user/get-token with documented payload structure:", {
+    console.log("🔄 Attempting /get-token with documented payload structure:", {
       email: cleanEmail,
       passwordType: "secretKey",
       passwordLength: cleanPassword.length,
@@ -90,9 +123,9 @@ export const login = async (email, password) => {
       // ═══════════════════════════════════════════════════════════════════════
       // COOKIE-BASED AUTH: Use fetch with credentials: 'include'
       // This allows the browser to receive and store HttpOnly cookies
-      // Base URL is /api/v1, endpoint includes /user/ prefix
+      // Base URL is /api/v1
       // ═══════════════════════════════════════════════════════════════════════
-      const response = await fetch(`${API_URL}/user/get-token`, {
+      const response = await fetch(`${API_URL}/get-token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

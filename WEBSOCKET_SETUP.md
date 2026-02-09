@@ -7,8 +7,8 @@ The Factory Management System uses a combination of:
 - **HTTP API** for authentication, historical data, and device control commands
 - **Cookie-based authentication** with HttpOnly cookies for security
 
-**Last Updated**: January 22, 2026  
-**Version**: 3.0 (Cookie-based Auth)
+**Last Updated**: February 10, 2026  
+**Version**: 4.0 (Simplified API)
 
 ---
 
@@ -16,25 +16,28 @@ The Factory Management System uses a combination of:
 
 ### Cookie-Based Authentication
 
-The system uses HttpOnly cookies for secure authentication instead of localStorage tokens:
+The system uses HttpOnly cookies for secure authentication:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    Authentication Flow                        │
 ├──────────────────────────────────────────────────────────────┤
 │                                                               │
-│  1. User/App calls POST /get-token with credentials          │
+│  1. App calls POST /get-token with credentials                │
 │                         │                                     │
 │                         ▼                                     │
 │  2. Server validates & returns HttpOnly cookie                │
 │     (JWT token stored in secure cookie)                       │
 │                         │                                     │
 │                         ▼                                     │
-│  3. All subsequent requests automatically include cookie      │
-│     (WebSocket, HTTP API calls)                              │
+│  3. App renders, WebSocket connects (uses cookies)            │
 │                         │                                     │
 │                         ▼                                     │
-│  4. On 401/400, attempt refresh via GET /get-new-token       │
+│  4. Subscribe to /topic/stream/<deviceId>                     │
+│     Subscribe to /topic/state/<deviceId>                      │
+│                         │                                     │
+│                         ▼                                     │
+│  5. On 401/400, attempt refresh via GET /get-new-token        │
 │                                                               │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -169,8 +172,6 @@ stompClient.activate();
 ```
 https://api.protonestconnect.co/api/v1
 ```
-
-**Note**: All endpoints include the `/user/` prefix (e.g., `/user/get-token`, `/user/get-stream-data/device`).
 
 ### Authentication
 
@@ -458,10 +459,10 @@ VITE_AUTH_SECRET_KEY = your-secret-key-from-protonest
 VITE_DEVICE_ID = devicetestuc
 ```
 
-**Note**: Base URL is `/api/v1` (without `/user`). All endpoints INCLUDE the `/user/` prefix:
-- ✓ `/user/get-token` (correct)
-- ✓ `/user/get-stream-data/device/topic` (correct)
-- ✓ `/user/update-state-details` (correct)
+**Note**: All endpoints are directly under `/api/v1` (no `/user/` prefix):
+- ✓ `/get-token` (correct)
+- ✓ `/get-stream-data/device/topic` (correct)
+- ✓ `/update-state-details` (correct)
 
 ---
 
@@ -486,6 +487,6 @@ src/
 
 ---
 
-**Document Version**: 3.0  
-**Last Updated**: January 22, 2026  
-**Compatible with**: Factory Management System v3.0 (Cookie Auth)
+**Document Version**: 4.0  
+**Last Updated**: February 10, 2026  
+**Compatible with**: Factory Management System v4.0 (Simplified API)

@@ -220,8 +220,8 @@ wss://api.protonestconnect.co/ws?token=<JWT>
 **STOMP Subscriptions:**
 
 ```
-/topic/protonest/<deviceId>/stream/fmc/<sensor>
-/topic/protonest/<deviceId>/state/fmc/<control>
+/topic/stream/<deviceId>   → Real-time sensor data
+/topic/state/<deviceId>    → Control/state updates
 ```
 
 **HTTP API Topic Parameter:**
@@ -287,4 +287,4 @@ For detailed documentation, see:
 
 **Built with ❤️ for modern factory monitoring**
 
-**Last Updated**: January 6, 2026
+**Last Updated**: February 10, 2026

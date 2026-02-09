@@ -242,7 +242,9 @@ class WebSocketClient {
       return false;
     }
 
-    const destination = `/app/device/${this.currentDeviceId}/state/fmc/${topic}`;
+    // Ensure topic has the correct fmc/ prefix (but avoid double prefix)
+    const formattedTopic = topic.startsWith("fmc/") ? topic.substring(4) : topic;
+    const destination = `/app/device/${this.currentDeviceId}/state/fmc/${formattedTopic}`;
 
     try {
       this.client.publish({

@@ -7,6 +7,7 @@ import HistoricalWindow from './Components/HistoricalWindow';
 import { useAuth } from './Context/AuthContext';
 import { webSocketClient } from './services/webSocketClient';
 import { getProductionData, getProductionLog, setUnitsFromBackend } from './services/productionService';
+import { getProductsIn24Hours, getCurrentUnitsFromBackend } from './services/deviceService';
 
 export default function App() {
   const { auth } = useAuth();
@@ -17,7 +18,7 @@ export default function App() {
   const [bellClicked, setBellClicked] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [selectedDevice, setSelectedDevice] = useState(() => localStorage.getItem('selectedDevice') || 'device9988');
+  const [selectedDevice, setSelectedDevice] = useState(() => localStorage.getItem('selectedDevice') || 'devicetestuc');
   const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
 
   // Factory status and control states
@@ -88,6 +89,9 @@ export default function App() {
   const [oeeData, setOeeData] = useState({ availability: 100, performance: 100, quality: 100, oee: 100 });
   const [overallEfficiency, setOverallEfficiency] = useState(0);
   const [efficiencyTrend, setEfficiencyTrend] = useState(0);
+
+  // Products fetched from backend for last 24 hours
+  const [products24h, setProducts24h] = useState({ count: 0, products: [] });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // STABLE DATA HANDLER (useCallback + useRef pattern)
@@ -487,19 +491,26 @@ export default function App() {
           setIsWebSocketConnected(true);
           setIsConnecting(false);
 
-          // Fetch initial units from backend on connection
-          try {
-            const { getCurrentUnitsFromBackend } = await import('./services/deviceService');
-            const currentDevice = localStorage.getItem('selectedDevice') || 'device9988';
-            const backendUnits = await getCurrentUnitsFromBackend(currentDevice);
+          // Fetch initial units and products from backend on connection
+          const currentDevice = localStorage.getItem('selectedDevice') || 'devicetestuc';
 
+          try {
+            // Fetch units count
+            const backendUnits = await getCurrentUnitsFromBackend(currentDevice);
             if (backendUnits > 0) {
               console.log(`📊 [App] Initializing units from backend: ${backendUnits}`);
               setUnitsFromBackend(currentDevice, backendUnits);
               setSensorData(prev => ({ ...prev, units: backendUnits }));
             }
+
+            // Fetch detailed product list for last 24 hours
+            const productData = await getProductsIn24Hours(currentDevice);
+            if (productData.count > 0) {
+              console.log(`📦 [App] Fetched ${productData.count} products from last 24hrs`);
+              setProducts24h(productData);
+            }
           } catch (error) {
-            console.warn('⚠️ [App] Could not fetch initial units from backend:', error.message);
+            console.warn('⚠️ [App] Could not fetch initial data from backend:', error.message);
           }
         });
 
@@ -572,20 +583,28 @@ export default function App() {
     let productionData = getProductionData(deviceId);
     const productionLogData = getProductionLog(deviceId);
 
-    // Fetch units from backend for the new device
+    // Fetch units and products from backend for the new device
     if (isWebSocketConnected) {
       try {
-        const { getCurrentUnitsFromBackend } = await import('./services/deviceService');
+        // Fetch units count
         const backendUnits = await getCurrentUnitsFromBackend(deviceId);
-
         if (backendUnits > 0) {
           console.log(`📊 [App] Fetched units from backend for ${deviceId}: ${backendUnits}`);
           setUnitsFromBackend(deviceId, backendUnits);
           productionData = getProductionData(deviceId);
         }
+
+        // Fetch detailed product list for last 24 hours
+        const productData = await getProductsIn24Hours(deviceId);
+        console.log(`📦 [App] Fetched ${productData.count} products from last 24hrs for ${deviceId}`);
+        setProducts24h(productData);
       } catch (error) {
-        console.warn('⚠️ [App] Could not fetch units from backend:', error.message);
+        console.warn('⚠️ [App] Could not fetch data from backend:', error.message);
+        setProducts24h({ count: 0, products: [] });
       }
+    } else {
+      // Reset products if not connected
+      setProducts24h({ count: 0, products: [] });
     }
 
     // Update with persisted units (may still be undefined if no data)
@@ -698,6 +717,7 @@ export default function App() {
               targetUnits={targetUnits}
               thresholds={thresholds}
               currentUnits={sensorData.units}
+              products24h={products24h}
             />
           )}
 

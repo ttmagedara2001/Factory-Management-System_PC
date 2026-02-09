@@ -6,9 +6,9 @@ This Factory Management System connects to Protonest MQTT broker via WebSocket f
 
 ## Auto-Login Configuration
 
-### Current Setup
+### Environment Variables
 
-The application attempts auto-login on startup using credentials stored in `src/App.jsx`.
+The application uses environment variables for credentials. Create a `.env` file:
 
 **⚠️ IMPORTANT: Update these credentials before deployment:**
 
@@ -63,11 +63,11 @@ export const MOCK_DEVICES = [
 
 The system uses two topic formats:
 
-**1. STOMP WebSocket Subscriptions (with /topic/ prefix):**
+**1. STOMP WebSocket Subscriptions:**
 
 ```
-/topic/protonest/<deviceId>/stream/fmc/<sensor>
-/topic/protonest/<deviceId>/state/fmc/<control>
+/topic/stream/<deviceId>   → All sensor data for device
+/topic/state/<deviceId>    → All control state for device
 ```
 
 **2. HTTP API Calls (topic parameter):**
@@ -95,7 +95,7 @@ Subscribe to real-time sensor streams:
 **STOMP Subscription Example:**
 
 ```
-/topic/protonest/device9988/stream/fmc/temperature
+/topic/stream/device9988
 ```
 
 **HTTP API Topic Parameter:**
@@ -117,7 +117,7 @@ Publish/subscribe to machine state:
 **STOMP Subscription Example:**
 
 ```
-/topic/protonest/device9988/state/fmc/machineControl
+/topic/state/device9988
 ```
 
 **HTTP API Topic Parameter:**
@@ -188,22 +188,23 @@ co2Score = max(0, 100 - (co2 × 2))
 
 ## WebSocket Connection Flow
 
-1. **Auto-Login**
+1. **Authentication (main.jsx)**
 
-   - App starts → Checks localStorage for JWT token
-   - If no token → Calls login API with credentials
-   - Stores JWT and refresh tokens
+   - App starts → Calls POST /get-token with credentials
+   - If success → Cookies set, App component renders
+   - If failure → Error screen shown
 
-2. **MQTT Connection**
+2. **WebSocket Connection (App.jsx)**
 
-   - Builds WebSocket URL with JWT token
-   - Connects to `wss://api.protonestconnect.co/ws?token=<JWT>`
+   - App renders → Connects to `wss://api.protonestconnect.co/ws`
+   - Cookies sent automatically (HttpOnly)
    - Waits for connection confirmation
 
 3. **Topic Subscription**
 
-   - Once connected → Subscribes to all topics for all devices
-   - Each device gets 8 subscriptions (7 stream + 1 state topics)
+   - Once connected → Subscribes to device topics:
+     - `/topic/stream/<deviceId>` for sensor data
+     - `/topic/state/<deviceId>` for control state
 
 4. **Data Processing**
    - Messages arrive → Parsed and validated
@@ -235,7 +236,7 @@ User clicks "MANUAL"
 → User clicks "STOP MACHINE"
 → HTTP POST to /update-state-details with topic: "fmc/machineControl"
 → Backend publishes to MQTT: protonest/<deviceId>/state/fmc/machineControl
-→ STOMP subscription receives on: /topic/protonest/<deviceId>/state/fmc/machineControl
+→ STOMP subscription receives on: /topic/state/<deviceId>
 → UI updates to show "STOPPED" status
 ```
 
@@ -265,12 +266,12 @@ Payload: {"temperature": "25.5"}
 
 ```json
 POST /get-stream-data/device/topic
-Headers: { "X-Token": "<jwt-token>" }
+Headers: { Cookie: <HttpOnly auth cookie> }
 Body: {
-  "deviceId": "device9988",
+  "deviceId": "devicetestuc",
   "topic": "fmc/temperature",
-  "startTime": "2025-01-01T00:00:00Z",
-  "endTime": "2025-01-06T23:59:59Z",
+  "startTime": "2026-01-01T00:00:00Z",
+  "endTime": "2026-02-10T23:59:59Z",
   "pagination": "0",
   "pageSize": "100"
 }
@@ -340,5 +341,5 @@ For issues with:
 
 ---
 
-**Last Updated**: January 6, 2026
-**Version**: 2.0.0
+**Last Updated**: February 10, 2026
+**Version**: 4.0.0 (Cookie Auth, Simplified Topics)

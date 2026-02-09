@@ -83,7 +83,7 @@ export const getStreamDataByTopic = async (
     );
     console.log(`⏰ [Historical] Time range: ${startTime} to ${endTime}`);
 
-    const response = await api.post("/user/get-stream-data/device/topic", {
+    const response = await api.post("/get-stream-data/device/topic", {
       deviceId,
       topic: formattedTopic,
       startTime,
@@ -124,7 +124,7 @@ export const getStreamDataForDevice = async (
   try {
     console.log(`📊 [Historical] Fetching all stream data for ${deviceId}`);
 
-    const response = await api.post("/user/get-stream-data/device", {
+    const response = await api.post("/get-stream-data/device", {
       deviceId,
       startTime,
       endTime,
@@ -162,7 +162,7 @@ export const getStreamDataForUser = async (
   try {
     console.log(`📊 [Historical] Fetching user stream data`);
 
-    const response = await api.post("/user/get-stream-data/user", {
+    const response = await api.post("/get-stream-data/user", {
       startTime,
       endTime,
       pagination: String(pagination),
@@ -191,14 +191,17 @@ export const getStreamDataForUser = async (
  */
 export const deleteStreamDataById = async (deviceId, topic, dataIds) => {
   try {
+    // Ensure topic has the correct fmc/ prefix
+    const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
+
     console.log(
-      `🗑️ [Historical] Deleting ${dataIds.length} records for ${deviceId}/${topic}`
+      `🗑️ [Historical] Deleting ${dataIds.length} records for ${deviceId}/${formattedTopic}`
     );
 
-    const response = await api.delete("/user/delete-stream-data-by-id", {
+    const response = await api.delete("/delete-stream-data-by-id", {
       data: {
         deviceId,
-        topic,
+        topic: formattedTopic,
         dataIds,
       },
     });
@@ -221,14 +224,17 @@ export const deleteStreamDataById = async (deviceId, topic, dataIds) => {
  */
 export const deleteStateTopic = async (deviceId, topic) => {
   try {
+    // Ensure topic has the correct fmc/ prefix
+    const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
+
     console.log(
-      `🗑️ [Historical] Deleting state topic ${topic} for ${deviceId}`
+      `🗑️ [Historical] Deleting state topic ${formattedTopic} for ${deviceId}`
     );
 
-    const response = await api.delete("/user/delete-state-topic", {
+    const response = await api.delete("/delete-state-topic", {
       data: {
         deviceId,
-        topic,
+        topic: formattedTopic,
       },
     });
 
