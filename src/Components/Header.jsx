@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, User, ChevronDown, Menu, Wifi, WifiOff, Radio, Activity } from 'lucide-react';
+import { Bell, User, ChevronDown, Menu, Wifi, Radio } from 'lucide-react';
 import { useAuth } from '../Context/AuthContext.jsx';
 
 const Header = ({ 

@@ -1,21 +1,24 @@
-// ============================================
-// FACTORY MANAGEMENT SYSTEM - HISTORICAL DATA SERVICE
-// ============================================
-// Specialized service for historical data fetching and calculations
-// Handles all 6 historical analysis indicators:
-// 1. Production Volume Trends (HTTP API)
-// 2. OEE Trends (Calculated Locally + localStorage)
-// 3. Machine Performance Trends (HTTP API)
-// 4. Environmental Trends (HTTP API)
-// 5. Downtime Causes - Pareto Analysis (Calculated Locally + localStorage)
-// 6. Detailed Event Log (HTTP API)
-// ============================================
+/**
+ * @file historicalDataService.js — Historical data fetching and analytics.
+ *
+ * Handles all 6 dashboard analysis indicators:
+ *   1. Production Volume Trends   (HTTP API — fmc/units topic)
+ *   2. OEE Trends                 (calculated + localStorage)
+ *   3. Machine Performance Trends (HTTP API — vibration, pressure, noise)
+ *   4. Environmental Trends       (HTTP API — temperature, humidity, co2)
+ *   5. Downtime Pareto Analysis   (localStorage-based)
+ *   6. Detailed Event Log         (derived from alerts)
+ *
+ * Time utilities, MTBF tracking, and aggregate fetching are also here.
+ */
 
 import api from "./api.js";
 
-// ============================================
-// DATE/TIME UTILITIES
-// ============================================
+const IS_DEV = import.meta.env.DEV;
+
+// ---------------------------------------------------------------------------
+// Date / time utilities
+// ---------------------------------------------------------------------------
 
 /**
  * Format date to ISO-8601 without milliseconds
@@ -53,9 +56,9 @@ export const getTimeRange = (range) => {
   };
 };
 
-// ============================================
-// HTTP API FUNCTIONS
-// ============================================
+// ---------------------------------------------------------------------------
+// HTTP API helpers
+// ---------------------------------------------------------------------------
 
 /**
  * Get stream data for a specific device and topic
@@ -72,16 +75,10 @@ export const getStreamDataByTopic = async (
   startTime,
   endTime,
   pagination = 0,
-  pageSize = 100
+  pageSize = 100,
 ) => {
   try {
-    // Ensure topic has the correct fmc/ prefix
     const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
-
-    console.log(
-      `📊 [Historical] Fetching ${formattedTopic} data for ${deviceId}`
-    );
-    console.log(`⏰ [Historical] Time range: ${startTime} to ${endTime}`);
 
     const response = await api.post("/get-stream-data/device/topic", {
       deviceId,
@@ -93,20 +90,13 @@ export const getStreamDataByTopic = async (
     });
 
     if (response.data.status === "Success") {
-      const recordCount = response.data.data?.length || 0;
-      console.log(
-        `✅ [Historical] Retrieved ${recordCount} records for ${formattedTopic}`
-      );
       return response.data.data || [];
     }
-
     return [];
   } catch (error) {
-    console.warn(`⚠️ [Historical] Error fetching ${topic}:`, {
-      status: error.response?.status,
-      message: error.response?.data?.message || error.message,
-    });
-    return []; // Return empty array to allow other requests to continue
+    if (IS_DEV)
+      console.warn(`[Historical] Error fetching ${topic}:`, error.message);
+    return [];
   }
 };
 
@@ -119,11 +109,9 @@ export const getStreamDataForDevice = async (
   startTime,
   endTime,
   pagination = 0,
-  pageSize = 100
+  pageSize = 100,
 ) => {
   try {
-    console.log(`📊 [Historical] Fetching all stream data for ${deviceId}`);
-
     const response = await api.post("/get-stream-data/device", {
       deviceId,
       startTime,
@@ -132,19 +120,11 @@ export const getStreamDataForDevice = async (
       pageSize: String(pageSize),
     });
 
-    if (response.data.status === "Success") {
-      console.log(
-        `✅ [Historical] Retrieved ${response.data.data?.length || 0} records`
-      );
-      return response.data.data || [];
-    }
-
+    if (response.data.status === "Success") return response.data.data || [];
     return [];
   } catch (error) {
-    console.warn(`⚠️ [Historical] Error fetching device data:`, {
-      status: error.response?.status,
-      message: error.response?.data?.message || error.message,
-    });
+    if (IS_DEV)
+      console.warn("[Historical] Error fetching device data:", error.message);
     return [];
   }
 };
@@ -157,11 +137,9 @@ export const getStreamDataForUser = async (
   startTime,
   endTime,
   pagination = 0,
-  pageSize = 100
+  pageSize = 100,
 ) => {
   try {
-    console.log(`📊 [Historical] Fetching user stream data`);
-
     const response = await api.post("/get-stream-data/user", {
       startTime,
       endTime,
@@ -169,18 +147,11 @@ export const getStreamDataForUser = async (
       pageSize: String(pageSize),
     });
 
-    if (response.data.status === "Success") {
-      console.log(
-        `✅ [Historical] Retrieved ${
-          response.data.data?.length || 0
-        } user records`
-      );
-      return response.data.data || [];
-    }
-
+    if (response.data.status === "Success") return response.data.data || [];
     return [];
   } catch (error) {
-    console.warn(`⚠️ [Historical] Error fetching user data:`, error.message);
+    if (IS_DEV)
+      console.warn("[Historical] Error fetching user data:", error.message);
     return [];
   }
 };
@@ -191,29 +162,15 @@ export const getStreamDataForUser = async (
  */
 export const deleteStreamDataById = async (deviceId, topic, dataIds) => {
   try {
-    // Ensure topic has the correct fmc/ prefix
     const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
 
-    console.log(
-      `🗑️ [Historical] Deleting ${dataIds.length} records for ${deviceId}/${formattedTopic}`
-    );
-
     const response = await api.delete("/delete-stream-data-by-id", {
-      data: {
-        deviceId,
-        topic: formattedTopic,
-        dataIds,
-      },
+      data: { deviceId, topic: formattedTopic, dataIds },
     });
 
-    if (response.data.status === "Success") {
-      console.log(`✅ [Historical] Successfully deleted records`);
-      return true;
-    }
-
-    return false;
+    return response.data.status === "Success";
   } catch (error) {
-    console.error(`❌ [Historical] Error deleting records:`, error.message);
+    console.error("[Historical] Error deleting records:", error.message);
     throw error;
   }
 };
@@ -224,35 +181,22 @@ export const deleteStreamDataById = async (deviceId, topic, dataIds) => {
  */
 export const deleteStateTopic = async (deviceId, topic) => {
   try {
-    // Ensure topic has the correct fmc/ prefix
     const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
 
-    console.log(
-      `🗑️ [Historical] Deleting state topic ${formattedTopic} for ${deviceId}`
-    );
-
     const response = await api.delete("/delete-state-topic", {
-      data: {
-        deviceId,
-        topic: formattedTopic,
-      },
+      data: { deviceId, topic: formattedTopic },
     });
 
-    if (response.data.status === "Success") {
-      console.log(`✅ [Historical] Successfully deleted state topic`);
-      return true;
-    }
-
-    return false;
+    return response.data.status === "Success";
   } catch (error) {
-    console.error(`❌ [Historical] Error deleting state topic:`, error.message);
+    console.error("[Historical] Error deleting state topic:", error.message);
     throw error;
   }
 };
 
-// ============================================
-// PRODUCTION VOLUME DATA
-// ============================================
+// ---------------------------------------------------------------------------
+// Production volume
+// ---------------------------------------------------------------------------
 
 /**
  * Fetch production volume data (units topic)
@@ -269,7 +213,7 @@ export const getProductionVolumeData = async (deviceId, startTime, endTime) => {
       startTime,
       endTime,
       0,
-      500
+      500,
     );
 
     // Group data by date
@@ -305,22 +249,19 @@ export const getProductionVolumeData = async (deviceId, startTime, endTime) => {
 
     // Convert to sorted array
     const result = Array.from(dailyData.values()).sort(
-      (a, b) => new Date(a.date) - new Date(b.date)
+      (a, b) => new Date(a.date) - new Date(b.date),
     );
 
-    console.log(
-      `📊 [Production] Processed ${result.length} daily production records`
-    );
     return result;
   } catch (error) {
-    console.error(`❌ [Production] Error:`, error.message);
+    console.error("[Historical] Production volume error:", error.message);
     return [];
   }
 };
 
-// ============================================
+// ---------------------------------------------------------------------------
 // OEE CALCULATION & STORAGE
-// ============================================
+// ---------------------------------------------------------------------------
 //
 // OEE (Overall Equipment Effectiveness) = Availability × Performance × Quality
 //
@@ -360,10 +301,10 @@ const OEE_CONFIG_KEY = "factory_oee_config";
 
 // Default OEE calculation configuration
 const DEFAULT_OEE_CONFIG = {
-  plannedProductionMinutes: 480,  // 8 hours = 480 minutes
-  idealCycleTimeMinutes: 1,       // 1 minute per unit (ideal)
-  targetUnitsPerHour: 60,         // Target production rate
-  qualityThreshold: 0.98,         // Assume 98% quality if no defect data
+  plannedProductionMinutes: 480, // 8 hours = 480 minutes
+  idealCycleTimeMinutes: 1, // 1 minute per unit (ideal)
+  targetUnitsPerHour: 60, // Target production rate
+  qualityThreshold: 0.98, // Assume 98% quality if no defect data
 };
 
 /**
@@ -387,9 +328,9 @@ export const getOEEConfig = () => {
 export const saveOEEConfig = (config) => {
   try {
     localStorage.setItem(OEE_CONFIG_KEY, JSON.stringify(config));
-    console.log("💾 [OEE] Config saved:", config);
+    console.log(`[OEE] Config saved.`);
   } catch (error) {
-    console.error("Error saving OEE config:", error);
+    console.error("[OEE] Error saving config:", error);
   }
 };
 
@@ -409,15 +350,17 @@ export const calculateOEE = (availability, performance, quality) => {
   const q = Math.min(Math.max(quality, 0), 100) / 100;
 
   const oee = a * p * q * 100;
-  
-  console.log(`📊 [OEE] = ${availability.toFixed(1)}% × ${performance.toFixed(1)}% × ${quality.toFixed(1)}% = ${oee.toFixed(1)}%`);
-  
+
+  console.log(
+    `[OEE] ${availability.toFixed(1)}% x ${performance.toFixed(1)}% x ${quality.toFixed(1)}% = ${oee.toFixed(1)}%`,
+  );
+
   return oee;
 };
 
 /**
  * Calculate OEE from production and machine data
- * 
+ *
  * @param {Object} params - OEE calculation parameters
  * @param {number} params.operatingTimeMinutes - Actual operating time
  * @param {number} params.plannedTimeMinutes - Planned production time
@@ -437,9 +380,10 @@ export const calculateOEEDetailed = ({
   // AVAILABILITY CALCULATION
   // Availability = Operating Time / Planned Production Time
   // ═══════════════════════════════════════════════════════════════════════
-  const availability = plannedTimeMinutes > 0 
-    ? (operatingTimeMinutes / plannedTimeMinutes) * 100 
-    : 0;
+  const availability =
+    plannedTimeMinutes > 0
+      ? (operatingTimeMinutes / plannedTimeMinutes) * 100
+      : 0;
 
   // ═══════════════════════════════════════════════════════════════════════
   // PERFORMANCE CALCULATION
@@ -447,19 +391,19 @@ export const calculateOEEDetailed = ({
   // This measures if the machine is running at its ideal speed
   // ═══════════════════════════════════════════════════════════════════════
   const theoreticalTime = idealCycleTimeMinutes * totalUnits;
-  const performance = operatingTimeMinutes > 0 
-    ? (theoreticalTime / operatingTimeMinutes) * 100 
-    : 0;
+  const performance =
+    operatingTimeMinutes > 0
+      ? (theoreticalTime / operatingTimeMinutes) * 100
+      : 0;
 
   // ═══════════════════════════════════════════════════════════════════════
   // QUALITY CALCULATION
   // Quality = Good Units / Total Units
   // If no defect tracking, assume 98% quality
   // ═══════════════════════════════════════════════════════════════════════
-  const actualGoodUnits = goodUnits !== null ? goodUnits : Math.floor(totalUnits * 0.98);
-  const quality = totalUnits > 0 
-    ? (actualGoodUnits / totalUnits) * 100 
-    : 100; // 100% quality if no units (no defects possible)
+  const actualGoodUnits =
+    goodUnits !== null ? goodUnits : Math.floor(totalUnits * 0.98);
+  const quality = totalUnits > 0 ? (actualGoodUnits / totalUnits) * 100 : 100; // 100% quality if no units (no defects possible)
 
   // ═══════════════════════════════════════════════════════════════════════
   // OEE CALCULATION
@@ -468,11 +412,11 @@ export const calculateOEEDetailed = ({
   const oee = calculateOEE(availability, performance, quality);
 
   // OEE Rating
-  let rating = 'Poor';
-  if (oee >= 85) rating = 'World-Class';
-  else if (oee >= 70) rating = 'Good';
-  else if (oee >= 60) rating = 'Average';
-  else if (oee >= 40) rating = 'Below Average';
+  let rating = "Poor";
+  if (oee >= 85) rating = "World-Class";
+  else if (oee >= 70) rating = "Good";
+  else if (oee >= 60) rating = "Average";
+  else if (oee >= 40) rating = "Below Average";
 
   return {
     oee: Math.round(oee * 10) / 10,
@@ -488,14 +432,14 @@ export const calculateOEEDetailed = ({
       defectUnits: totalUnits - actualGoodUnits,
       theoreticalTimeMinutes: theoreticalTime,
       idealCycleTimeMinutes,
-    }
+    },
   };
 };
 
 /**
  * Calculate OEE from sensor data and production counts
  * Uses machine state data to estimate availability
- * 
+ *
  * @param {Object} params
  * @param {number} params.unitsProduced - Units produced in the period
  * @param {number} params.machineRunTime - Time machine was in RUN state (minutes)
@@ -509,21 +453,23 @@ export const calculateOEEFromProductionData = ({
   sensorData = {},
 }) => {
   const config = getOEEConfig();
-  
+
   // Estimate operating time if not provided
   // Default assumption: machine runs 75% of planned time
-  const operatingTime = machineRunTime !== null 
-    ? machineRunTime 
-    : totalTime * 0.75;
+  const operatingTime =
+    machineRunTime !== null ? machineRunTime : totalTime * 0.75;
 
   // Estimate quality from sensor data
   // Poor environmental conditions may affect quality
   let qualityFactor = 0.98; // Default 98%
-  
+
   if (sensorData.vibration && sensorData.vibration > 7) {
     qualityFactor -= 0.05; // High vibration reduces quality
   }
-  if (sensorData.temperature && (sensorData.temperature > 35 || sensorData.temperature < 15)) {
+  if (
+    sensorData.temperature &&
+    (sensorData.temperature > 35 || sensorData.temperature < 15)
+  ) {
     qualityFactor -= 0.03; // Temperature out of range reduces quality
   }
   if (sensorData.humidity && sensorData.humidity > 70) {
@@ -577,7 +523,10 @@ export const saveOEEDataPoint = (dataPoint) => {
     }
 
     localStorage.setItem(OEE_STORAGE_KEY, JSON.stringify(history));
-    console.log(`💾 [OEE] Saved data point: ${dataPoint.oee}%. Total: ${history.length}`);
+    if (IS_DEV)
+      console.log(
+        `[OEE] Saved data point: ${dataPoint.oee}%. Total: ${history.length}`,
+      );
     return history;
   } catch (error) {
     console.error("Error saving OEE data:", error);
@@ -588,12 +537,16 @@ export const saveOEEDataPoint = (dataPoint) => {
 /**
  * Calculate OEE from real-time production data and save to history
  * This should be called periodically (e.g., every hour or when shift ends)
- * 
+ *
  * @param {Object} productionData - Production metrics
  * @param {Object} machineState - Current machine state
  * @param {Object} sensorData - Current sensor readings
  */
-export const calculateAndStoreOEE = (productionData = {}, machineState = {}, sensorData = {}) => {
+export const calculateAndStoreOEE = (
+  productionData = {},
+  machineState = {},
+  sensorData = {},
+) => {
   const {
     totalUnits = 0,
     goodUnits = null,
@@ -642,7 +595,7 @@ export const getOEEChartData = () => {
         availability: 0,
         performance: 0,
         quality: 0,
-        rating: 'No Data',
+        rating: "No Data",
       },
     ];
   }
@@ -658,13 +611,13 @@ export const getOEEChartData = () => {
     const weekKey = startOfWeek.toISOString().split("T")[0];
 
     if (!weeklyData.has(weekKey)) {
-      weeklyData.set(weekKey, { 
-        week: weekKey, 
-        oeeSum: 0, 
+      weeklyData.set(weekKey, {
+        week: weekKey,
+        oeeSum: 0,
         availSum: 0,
         perfSum: 0,
         qualSum: 0,
-        count: 0 
+        count: 0,
       });
     }
 
@@ -680,15 +633,15 @@ export const getOEEChartData = () => {
   return Array.from(weeklyData.values())
     .map((w) => {
       const avgOee = w.oeeSum / w.count;
-      let rating = 'Poor';
-      if (avgOee >= 85) rating = 'World-Class';
-      else if (avgOee >= 70) rating = 'Good';
-      else if (avgOee >= 60) rating = 'Average';
-      else if (avgOee >= 40) rating = 'Below Average';
+      let rating = "Poor";
+      if (avgOee >= 85) rating = "World-Class";
+      else if (avgOee >= 70) rating = "Good";
+      else if (avgOee >= 60) rating = "Average";
+      else if (avgOee >= 40) rating = "Below Average";
 
       return {
         week: w.week,
-        oee: Math.round((avgOee) * 10) / 10,
+        oee: Math.round(avgOee * 10) / 10,
         availability: Math.round((w.availSum / w.count) * 10) / 10,
         performance: Math.round((w.perfSum / w.count) * 10) / 10,
         quality: Math.round((w.qualSum / w.count) * 10) / 10,
@@ -704,14 +657,14 @@ export const getOEEChartData = () => {
  */
 export const getCurrentOEESummary = () => {
   const history = getOEEHistory();
-  
+
   if (history.length === 0) {
     return {
       oee: 0,
       availability: 0,
       performance: 0,
       quality: 0,
-      rating: 'No Data',
+      rating: "No Data",
       lastUpdated: null,
     };
   }
@@ -722,15 +675,15 @@ export const getCurrentOEESummary = () => {
     availability: latest.availability || 0,
     performance: latest.performance || 0,
     quality: latest.quality || 0,
-    rating: latest.rating || 'Unknown',
+    rating: latest.rating || "Unknown",
     lastUpdated: latest.timestamp,
     unitsProduced: latest.unitsProduced || 0,
   };
 };
 
-// ============================================
+// ---------------------------------------------------------------------------
 // MTBF (Mean Time Between Failures) CALCULATION
-// ============================================
+// ---------------------------------------------------------------------------
 
 /**
  * Get MTBF history from localStorage
@@ -753,7 +706,7 @@ export const getMTBFData = () => {
 export const recordFailure = (
   deviceId,
   failureType,
-  timestamp = new Date().toISOString()
+  timestamp = new Date().toISOString(),
 ) => {
   try {
     const data = getMTBFData();
@@ -772,7 +725,7 @@ export const recordFailure = (
     // Recalculate MTBF
     if (data.failures.length >= 2) {
       const sortedFailures = [...data.failures].sort(
-        (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+        (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
       );
 
       let totalTime = 0;
@@ -786,14 +739,15 @@ export const recordFailure = (
       // MTBF in hours
       data.mtbf =
         Math.round(
-          (totalTime / (sortedFailures.length - 1) / (1000 * 60 * 60)) * 10
+          (totalTime / (sortedFailures.length - 1) / (1000 * 60 * 60)) * 10,
         ) / 10;
     }
 
     data.lastCalculated = new Date().toISOString();
     localStorage.setItem(MTBF_STORAGE_KEY, JSON.stringify(data));
 
-    console.log(`💾 [MTBF] Recorded failure. MTBF: ${data.mtbf} hours`);
+    if (IS_DEV)
+      console.log(`[MTBF] Recorded failure. MTBF: ${data.mtbf} hours`);
     return data;
   } catch (error) {
     console.error("Error recording failure:", error);
@@ -809,9 +763,9 @@ export const getMTBFHours = () => {
   return data.mtbf || 0;
 };
 
-// ============================================
+// ---------------------------------------------------------------------------
 // DOWNTIME CAUSES (PARETO ANALYSIS)
-// ============================================
+// ---------------------------------------------------------------------------
 
 const DOWNTIME_STORAGE_KEY = "factory_downtime_causes";
 
@@ -837,7 +791,7 @@ export const recordDowntimeEvent = (
   deviceId,
   cause,
   durationMinutes = 0,
-  timestamp = new Date().toISOString()
+  timestamp = new Date().toISOString(),
 ) => {
   try {
     const history = getDowntimeHistory();
@@ -855,7 +809,8 @@ export const recordDowntimeEvent = (
     }
 
     localStorage.setItem(DOWNTIME_STORAGE_KEY, JSON.stringify(history));
-    console.log(`💾 [Downtime] Recorded: ${cause} (${durationMinutes} mins)`);
+    if (IS_DEV)
+      console.log(`[Downtime] Recorded: ${cause} (${durationMinutes} mins)`);
     return history;
   } catch (error) {
     console.error("Error recording downtime:", error);
@@ -941,9 +896,9 @@ export const analyzeAlertForDowntime = (alert, deviceId) => {
   return null;
 };
 
-// ============================================
+// ---------------------------------------------------------------------------
 // MACHINE PERFORMANCE DATA
-// ============================================
+// ---------------------------------------------------------------------------
 
 /**
  * Fetch machine performance metrics (vibration, pressure, noise)
@@ -951,18 +906,19 @@ export const analyzeAlertForDowntime = (alert, deviceId) => {
 export const getMachinePerformanceData = async (
   deviceId,
   startTime,
-  endTime
+  endTime,
 ) => {
   try {
     const topics = ["vibration", "pressure", "noise"];
 
-    console.log(`📊 [Machine] Fetching performance data for ${deviceId}`);
+    if (IS_DEV)
+      console.log(`[Machine] Fetching performance data for ${deviceId}`);
 
     // Fetch all topics in parallel
     const results = await Promise.allSettled(
       topics.map((topic) =>
-        getStreamDataByTopic(deviceId, topic, startTime, endTime, 0, 200)
-      )
+        getStreamDataByTopic(deviceId, topic, startTime, endTime, 0, 200),
+      ),
     );
 
     // Organize by timestamp
@@ -1016,17 +972,18 @@ export const getMachinePerformanceData = async (
       .filter((d) => d.timestamp)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    console.log(`✅ [Machine] Processed ${result.length} performance records`);
+    if (IS_DEV)
+      console.log(`[Machine] Processed ${result.length} performance records`);
     return result;
   } catch (error) {
-    console.error(`❌ [Machine] Error:`, error.message);
+    console.error(`[Machine] Error:`, error.message);
     return [];
   }
 };
 
-// ============================================
+// ---------------------------------------------------------------------------
 // ENVIRONMENTAL TRENDS DATA
-// ============================================
+// ---------------------------------------------------------------------------
 
 /**
  * Fetch environmental metrics (temperature, humidity, co2)
@@ -1037,13 +994,13 @@ export const getEnvironmentalData = async (deviceId, startTime, endTime) => {
     // Only fetch temperature, humidity, co2 - AQI is calculated client-side
     const topics = ["temperature", "humidity", "co2"];
 
-    console.log(`🌡️ [Environment] Fetching data for ${deviceId}`);
+    if (IS_DEV) console.log(`[Environment] Fetching data for ${deviceId}`);
 
     // Fetch all topics in parallel
     const results = await Promise.allSettled(
       topics.map((topic) =>
-        getStreamDataByTopic(deviceId, topic, startTime, endTime, 0, 200)
-      )
+        getStreamDataByTopic(deviceId, topic, startTime, endTime, 0, 200),
+      ),
     );
 
     // Organize by timestamp
@@ -1098,19 +1055,20 @@ export const getEnvironmentalData = async (deviceId, startTime, endTime) => {
       .filter((d) => d.timestamp)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    console.log(
-      `✅ [Environment] Processed ${result.length} environmental records`
-    );
+    if (IS_DEV)
+      console.log(
+        `[Environment] Processed ${result.length} environmental records`,
+      );
     return result;
   } catch (error) {
-    console.error(`❌ [Environment] Error:`, error.message);
+    console.error(`[Environment] Error:`, error.message);
     return [];
   }
 };
 
-// ============================================
+// ---------------------------------------------------------------------------
 // EVENT LOG DATA
-// ============================================
+// ---------------------------------------------------------------------------
 
 /**
  * Format alerts as event log data
@@ -1126,9 +1084,9 @@ export const formatAlertsAsEventLog = (alerts = []) => {
   }));
 };
 
-// ============================================
+// ---------------------------------------------------------------------------
 // COMBINED DATA FETCH
-// ============================================
+// ---------------------------------------------------------------------------
 
 /**
  * Fetch all historical data for charts
@@ -1137,10 +1095,12 @@ export const formatAlertsAsEventLog = (alerts = []) => {
 export const fetchAllHistoricalData = async (deviceId, timeRange = "24h") => {
   const { startTime, endTime } = getTimeRange(timeRange);
 
-  console.log(`📊 [Historical] Fetching all data for ${deviceId}`);
-  console.log(
-    `⏰ [Historical] Range: ${timeRange} (${startTime} to ${endTime})`
-  );
+  if (IS_DEV) {
+    console.log(`[Historical] Fetching all data for ${deviceId}`);
+    console.log(
+      `[Historical] Range: ${timeRange} (${startTime} to ${endTime})`,
+    );
+  }
 
   try {
     // Fetch HTTP data in parallel
@@ -1166,7 +1126,7 @@ export const fetchAllHistoricalData = async (deviceId, timeRange = "24h") => {
       endTime,
     };
   } catch (error) {
-    console.error(`❌ [Historical] Error fetching data:`, error);
+    console.error(`[Historical] Error fetching data:`, error);
     throw error;
   }
 };

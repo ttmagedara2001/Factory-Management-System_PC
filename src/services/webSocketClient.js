@@ -1,17 +1,33 @@
+/**
+ * @file webSocketClient.js — STOMP-over-WebSocket client for real-time data.
+ *
+ * Uses @stomp/stompjs to maintain a persistent connection to:
+ *   wss://api.protonestconnect.co/ws
+ *
+ * Connection strategy:
+ *   1. Primary  — cookies (sent automatically by the browser).
+ *   2. Fallback — ?token=<jwt> query parameter.
+ *
+ * Guard: connect() is a no-op until markTokenReady() has been called by
+ * authService after a successful /get-token request.
+ *
+ * Subscriptions (per device):
+ *   /topic/stream/<deviceId>   — sensor telemetry
+ *   /topic/state/<deviceId>    — control / state updates
+ *
+ * Publishing (commands):
+ *   /app/device/<deviceId>/state/fmc/<topic>
+ */
+
 import { Client } from "@stomp/stompjs";
 
-// ============================================
-// WEBSOCKET CLIENT - Cookie-Based Authentication
-// ============================================
-// Simple STOMP WebSocket client that relies on HttpOnly cookies
-// Cookies are automatically sent by the browser after login
-// ============================================
+const BASE_WS_URL = "wss://api.protonestconnect.co/ws";
+const IS_DEV = import.meta.env.DEV;
 
-const WS_URL = import.meta.env.VITE_WS_URL;
+// ---------------------------------------------------------------------------
+// WebSocketClient
+// ---------------------------------------------------------------------------
 
-/**
- * WebSocket Client for Real-Time Dashboard
- */
 class WebSocketClient {
   constructor() {
     this.client = null;
@@ -21,121 +37,134 @@ class WebSocketClient {
     this.disconnectCallback = null;
     this.subscriptions = new Map();
     this.isReady = false;
+
+    /** Guard — must be set via markTokenReady() before connect(). */
+    this._tokenAcquired = false;
+    this._jwtToken = null;
   }
 
+  // -------------------------------------------------------------------------
+  // Auth guard
+  // -------------------------------------------------------------------------
+
   /**
-   * Connect to WebSocket server
-   * Cookies are sent automatically (set by login)
+   * Unlock the WebSocket connection after a successful /get-token call.
+   * @param {string|null} jwtToken — JWT for query-param fallback (null = cookie-only).
    */
+  markTokenReady(jwtToken = null) {
+    this._tokenAcquired = true;
+    this._jwtToken = jwtToken;
+    if (IS_DEV) console.log("[WS] Token ready — connection unlocked.");
+  }
+
+  // -------------------------------------------------------------------------
+  // Connection lifecycle
+  // -------------------------------------------------------------------------
+
+  /** Activate the STOMP client. Requires markTokenReady() first. */
   connect() {
-    if (this.client?.connected) {
-      console.log("[WS] Already connected");
+    if (this.client?.connected) return;
+
+    if (!this._tokenAcquired) {
+      console.warn("[WS] Cannot connect — call markTokenReady() first.");
       return;
     }
 
-    if (!WS_URL) {
-      console.error("❌ VITE_WS_URL not configured");
-      return;
+    // Build broker URL: prefer cookies, fall back to query param.
+    let brokerURL = BASE_WS_URL;
+    if (this._jwtToken) {
+      brokerURL = `${BASE_WS_URL}?token=${encodeURIComponent(this._jwtToken)}`;
     }
 
-    console.log("[WS] Connecting to:", WS_URL);
+    if (IS_DEV) console.log("[WS] Connecting to", brokerURL);
 
     const self = this;
 
     this.client = new Client({
-      brokerURL: WS_URL,
+      brokerURL,
       reconnectDelay: 5000,
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
 
-      onConnect: () => {
-        console.log("✅ WebSocket connected");
+      // Native WebSocket — cookies are included automatically.
+      webSocketFactory: () => new WebSocket(brokerURL),
+
+      onConnect() {
+        if (IS_DEV) console.log("[WS] Connected.");
         self.isReady = true;
-
-        // Auto-subscribe if device was set before connection
-        if (self.currentDeviceId) {
-          self._subscribe(self.currentDeviceId);
-        }
-
-        if (self.connectCallback) {
-          self.connectCallback();
-        }
+        if (self.currentDeviceId) self._subscribe(self.currentDeviceId);
+        self.connectCallback?.();
       },
 
-      onStompError: (frame) => {
-        console.error("❌ STOMP error:", frame.headers["message"]);
-        console.error("Details:", frame.body);
+      onStompError(frame) {
+        console.error(
+          "[WS] STOMP error:",
+          frame.headers["message"],
+          frame.body,
+        );
       },
 
-      onWebSocketError: (event) => {
-        console.error("🚫 WebSocket error", event);
+      onWebSocketError(event) {
+        console.error("[WS] Transport error.", event);
       },
 
-      onWebSocketClose: (event) => {
-        console.warn("🔻 WebSocket closed", event);
+      onWebSocketClose() {
         self.isReady = false;
-
-        if (self.disconnectCallback) {
-          self.disconnectCallback();
-        }
+        self.disconnectCallback?.();
       },
 
-      debug: (msg) => {
-        // Uncomment for debugging:
-        // console.log("🪵", msg);
-      },
+      // STOMP debug output — enable only when needed.
+      debug: () => {},
     });
 
     this.client.activate();
   }
 
-  /**
-   * Subscribe to device topics
-   * @param {string} deviceId - Device ID (case-sensitive)
-   */
-  _subscribe(deviceId) {
-    if (!this.client?.connected) {
-      console.warn("[WS] Not connected, will subscribe when ready");
-      return;
-    }
+  /** Deactivate the STOMP client and clean up subscriptions. */
+  disconnect() {
+    if (this.currentDeviceId) this._unsubscribe(this.currentDeviceId);
 
-    const self = this;
-
-    // 🔔 Stream topic - sensor data
-    const streamTopic = `/topic/stream/${deviceId}`;
-    if (!this.subscriptions.has(streamTopic)) {
-      const sub = this.client.subscribe(streamTopic, (message) => {
-        try {
-          const data = JSON.parse(message.body);
-          console.log("📡 Stream:", data);
-          self._handleData(data);
-        } catch (err) {
-          console.error("Error parsing stream:", err);
-        }
-      });
-      this.subscriptions.set(streamTopic, sub);
-      console.log("🔔 Subscribed to", streamTopic);
-    }
-
-    // 🔔 State topic - control/state data
-    const stateTopic = `/topic/state/${deviceId}`;
-    if (!this.subscriptions.has(stateTopic)) {
-      const sub = this.client.subscribe(stateTopic, (message) => {
-        try {
-          const data = JSON.parse(message.body);
-          console.log("📡 State:", data);
-          self._handleData(data);
-        } catch (err) {
-          console.error("Error parsing state:", err);
-        }
-      });
-      this.subscriptions.set(stateTopic, sub);
-      console.log("🔔 Subscribed to", stateTopic);
+    if (this.client) {
+      this.client.deactivate();
+      this.isReady = false;
+      if (IS_DEV) console.log("[WS] Disconnected.");
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Subscriptions
+  // -------------------------------------------------------------------------
+
   /**
-   * Unsubscribe from all topics for a device
+   * Subscribe to stream + state topics for a device.
+   * @param {string} deviceId
+   * @private
+   */
+  _subscribe(deviceId) {
+    if (!this.client?.connected) return;
+
+    const topics = [`/topic/stream/${deviceId}`, `/topic/state/${deviceId}`];
+
+    topics.forEach((topic) => {
+      if (this.subscriptions.has(topic)) return;
+
+      const sub = this.client.subscribe(topic, (message) => {
+        try {
+          this._handleData(JSON.parse(message.body));
+        } catch (err) {
+          console.error(`[WS] Parse error on ${topic}:`, err);
+        }
+      });
+
+      this.subscriptions.set(topic, sub);
+      if (IS_DEV) console.log("[WS] Subscribed:", topic);
+    });
+  }
+
+  /**
+   * Unsubscribe from all topics belonging to a device.
+   * @param {string} deviceId
+   * @private
    */
   _unsubscribe(deviceId) {
     const keysToRemove = [];
@@ -144,9 +173,8 @@ class WebSocketClient {
       if (topic.includes(deviceId)) {
         try {
           sub.unsubscribe();
-          console.log("🔕 Unsubscribed from", topic);
-        } catch (err) {
-          console.warn("Error unsubscribing:", err);
+        } catch {
+          /* already closed */
         }
         keysToRemove.push(topic);
       }
@@ -156,39 +184,39 @@ class WebSocketClient {
   }
 
   /**
-   * Handle incoming data and forward to callback
+   * Forward incoming message fields to the registered data callback.
+   * @param {Object} data — parsed message body.
+   * @private
    */
   _handleData(data) {
     if (!this.dataCallback || typeof data !== "object") return;
 
-    // Add timestamp if missing
     const timestamp = data.timestamp || new Date().toISOString();
 
-    // Forward each key as a sensor update
     Object.keys(data).forEach((key) => {
       if (key === "timestamp" || key === "deviceId") return;
 
       let value = data[key];
-      // Convert string numbers
-      if (typeof value === "string" && !isNaN(Number(value))) {
+      if (typeof value === "string" && !isNaN(Number(value)))
         value = Number(value);
-      }
 
-      this.dataCallback({
-        sensorType: key,
-        value: value,
-        timestamp: timestamp,
-      });
+      this.dataCallback({ sensorType: key, value, timestamp });
     });
   }
 
+  // -------------------------------------------------------------------------
+  // Public API
+  // -------------------------------------------------------------------------
+
   /**
-   * Subscribe to a device
-   * @param {string} deviceId - Device ID (case-sensitive)
-   * @param {Function} callback - Data handler
+   * Subscribe to a device's topics and register a data callback.
+   * Returns a cleanup function that unsubscribes.
+   *
+   * @param {string}   deviceId — device to subscribe to.
+   * @param {Function} callback — receives { sensorType, value, timestamp }.
+   * @returns {Function} cleanup — call to unsubscribe.
    */
   subscribeToDevice(deviceId, callback) {
-    // Unsubscribe from previous device
     if (this.currentDeviceId && this.currentDeviceId !== deviceId) {
       this._unsubscribe(this.currentDeviceId);
     }
@@ -196,11 +224,8 @@ class WebSocketClient {
     this.currentDeviceId = deviceId;
     this.dataCallback = callback;
 
-    if (this.isReady) {
-      this._subscribe(deviceId);
-    }
+    if (this.isReady) this._subscribe(deviceId);
 
-    // Return cleanup function
     return () => {
       if (this.currentDeviceId === deviceId) {
         this._unsubscribe(deviceId);
@@ -209,42 +234,37 @@ class WebSocketClient {
     };
   }
 
-  /**
-   * Check if connected
-   */
+  /** Whether the STOMP client is currently connected. */
   get isConnected() {
     return this.client?.connected || false;
   }
 
-  /**
-   * Register connect callback
-   */
+  /** Register a callback invoked on successful connection. */
   onConnect(callback) {
     this.connectCallback = callback;
-    if (this.isConnected) {
-      callback();
-    }
+    if (this.isConnected) callback();
   }
 
-  /**
-   * Register disconnect callback
-   */
+  /** Register a callback invoked when the connection drops. */
   onDisconnect(callback) {
     this.disconnectCallback = callback;
   }
 
   /**
-   * Send command to device
+   * Publish a command to a device state topic.
+   *
+   * @param {string} topic   — e.g. "machineControl", "ventilation".
+   * @param {Object} payload — command body (merged with deviceId + timestamp).
+   * @returns {boolean} `true` if the message was published.
    */
   sendCommand(topic, payload) {
     if (!this.isConnected || !this.currentDeviceId) {
-      console.warn("[WS] Cannot send - not connected or no device");
+      console.warn("[WS] Cannot send — not connected or no device selected.");
       return false;
     }
 
-    // Ensure topic has the correct fmc/ prefix (but avoid double prefix)
-    const formattedTopic = topic.startsWith("fmc/") ? topic.substring(4) : topic;
-    const destination = `/app/device/${this.currentDeviceId}/state/fmc/${formattedTopic}`;
+    const cleanTopic = topic.startsWith("fmc/") ? topic.substring(4) : topic;
+    const destination = `/app/device/${this.currentDeviceId}/state/fmc/${cleanTopic}`;
 
     try {
       this.client.publish({
@@ -256,16 +276,18 @@ class WebSocketClient {
         }),
         headers: { "content-type": "application/json" },
       });
-      console.log("📤 Sent command to", destination);
+      if (IS_DEV) console.log("[WS] Published:", destination);
       return true;
     } catch (error) {
-      console.error("❌ Failed to send command:", error);
+      console.error("[WS] Publish failed:", error);
       return false;
     }
   }
 
   /**
-   * Send ventilation command
+   * Send a ventilation ON/OFF command.
+   * @param {string} state — "on" or "off".
+   * @param {string} mode  — "manual" or "auto".
    */
   sendVentilationCommand(state, mode = "manual") {
     return this.sendCommand("ventilation", {
@@ -275,34 +297,23 @@ class WebSocketClient {
   }
 
   /**
-   * Send machine control command
+   * Send a machine control command.
+   * @param {string} command — "RUN", "STOP", or "IDLE".
    */
   sendMachineControlCommand(command) {
     return this.sendCommand("machineControl", {
       machineControl: command.toLowerCase(),
     });
   }
-
-  /**
-   * Disconnect from WebSocket
-   */
-  disconnect() {
-    if (this.currentDeviceId) {
-      this._unsubscribe(this.currentDeviceId);
-    }
-
-    if (this.client) {
-      this.client.deactivate();
-      this.isReady = false;
-      console.log("[WS] Disconnected");
-    }
-  }
 }
 
-// Export singleton
+// ---------------------------------------------------------------------------
+// Singleton export
+// ---------------------------------------------------------------------------
+
 export const webSocketClient = new WebSocketClient();
 
-// Dev mode helper
-if (typeof window !== "undefined" && import.meta.env?.DEV) {
+// Expose to browser console in development.
+if (typeof window !== "undefined" && IS_DEV) {
   window.webSocketClient = webSocketClient;
 }

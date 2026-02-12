@@ -1,172 +1,130 @@
+/**
+ * @file api.js — Axios HTTP client for the Protonest REST API.
+ *
+ * Responsibilities:
+ *  1. Create a pre-configured Axios instance (base URL, cookies, timeout).
+ *  2. Automatically refresh the JWT cookie on 400/401 "Invalid token" errors.
+ *  3. Provide a helper to read the base URL from other modules.
+ *
+ * All business-logic API calls live in deviceService.js and
+ * historicalDataService.js — this file is transport-only.
+ *
+ * Authentication: HttpOnly cookies set by POST /get-token.
+ * Base URL:       VITE_API_BASE_URL  →  https://api.protonestconnect.co/api/v1/user
+ */
+
 import axios from "axios";
 
-// Backend API URL from environment variables
-const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
 
-// Named helper to allow other modules to read the base API URL
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const IS_DEV = import.meta.env.DEV;
+
+/** Expose the base URL so other services can build fetch URLs. */
 export function getApiUrl() {
   return BASE_URL;
 }
 
-// ============================================
-// NOTE: API business logic functions (getStreamDataForDevice,
-// getStateDetailsForDevice, updateStateDetails, etc.) are
-// centralized in deviceService.js. This file only provides:
-// 1. The axios instance with interceptors
-// 2. The base URL helper function
-// ============================================
+if (IS_DEV) console.log("[API] Base URL:", BASE_URL);
 
-console.log("🔧 API Base URL:", BASE_URL);
+// ---------------------------------------------------------------------------
+// Axios instance
+// ---------------------------------------------------------------------------
 
 const api = axios.create({
   baseURL: BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { "Content-Type": "application/json" },
   timeout: 15000,
-  // ✅ Use HttpOnly cookies for authentication
-  withCredentials: true,
+  withCredentials: true, // send HttpOnly cookies on every request
 });
 
-// Request Interceptor: Adds cookies automatically (withCredentials: true)
+// ---------------------------------------------------------------------------
+// Request interceptor — dev logging only
+// ---------------------------------------------------------------------------
+
 api.interceptors.request.use(
   (config) => {
-    // Note: X-Token header removed - using HttpOnly cookies instead
-    // Cookies are sent automatically with withCredentials: true
-
-    console.log("📤 API Request:", {
-      method: config.method?.toUpperCase(),
-      url: config.url,
-      baseURL: config.baseURL,
-      withCredentials: config.withCredentials,
-      payload: config.data || undefined,
-    });
-
+    if (IS_DEV) {
+      console.log(`[API] → ${config.method?.toUpperCase()} ${config.url}`);
+    }
     return config;
   },
-  (error) => {
-    console.error("❌ Request interceptor error:", error);
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error),
 );
 
-// Response Interceptor: Handles Token Refresh (cookie-based) and various errors
+// ---------------------------------------------------------------------------
+// Response interceptor — error handling & silent token refresh
+// ---------------------------------------------------------------------------
+
+/** Flags to suppress repetitive console noise. */
+const _logged = { deviceAuth: false, generic400: false };
+
 api.interceptors.response.use(
-  (response) => {
-    console.log("📥 API Response:", {
-      status: response.status,
-      url: response.config.url,
-      method: response.config.method?.toUpperCase(),
-    });
-    return response;
-  },
+  (response) => response,
   async (error) => {
-    const originalRequest = error.config;
+    const original = error.config;
+    const status = error.response?.status;
+    const body = error.response?.data;
+    const errMsg = body?.data || body?.message || "";
 
-    // Log API errors for debugging (suppress repetitive 400 errors)
-    if (error.response) {
-      const is400Error = error.response.status === 400;
-      const errorData =
-        error.response.data?.data || error.response.data?.message;
-
-      if (
-        !is400Error ||
-        (!window.__api400ErrorLogged &&
-          errorData !== "Device does not belong to the user")
-      ) {
-        console.error("❌ API Error Response:", {
-          status: error.response.status,
-          statusText: error.response.statusText,
-          url: originalRequest?.url,
-          method: originalRequest?.method?.toUpperCase(),
-          data: error.response.data,
-          allowHeader: error.response.headers?.allow,
-        });
-
-        if (is400Error) {
-          window.__api400ErrorLogged = true;
-        }
+    // Device-ownership error — log once, then suppress.
+    if (status === 400 && errMsg === "Device does not belong to the user") {
+      if (!_logged.deviceAuth) {
+        console.error(
+          "[API] Device does not belong to your account. " +
+            "Verify the device ID in your Protonest dashboard.",
+        );
+        _logged.deviceAuth = true;
       }
-
-      // Enhanced logging for 400 errors
-      if (error.response.status === 400) {
-        const errorData =
-          error.response.data?.data || error.response.data?.message;
-
-        // Special handling for device ownership errors - show once
-        if (errorData === "Device does not belong to the user") {
-          if (!window.__deviceAuthErrorShown) {
-            console.error("\n🚫 DEVICE AUTHORIZATION ERROR");
-            console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            console.error("❌ Device does not belong to your account");
-            console.error("\n💡 TO FIX THIS:");
-            console.error("   1. Go to: https://api.protonestconnect.co");
-            console.error("   2. Find your device ID in your dashboard");
-            console.error("   3. Update 'defaultDeviceId' in Dashboard.jsx\n");
-            console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-            window.__deviceAuthErrorShown = true;
-          }
-          return Promise.reject(error);
-        }
-
-        // Only log non-auth 400 errors in detail
-        if (errorData !== "Device does not belong to the user") {
-          console.error("🔍 400 Error:", {
-            endpoint: originalRequest?.url,
-            message: errorData,
-          });
-        }
-      }
-    }
-
-    // Handle 405 Method Not Allowed
-    if (error.response?.status === 405) {
-      console.error("🚫 Method Not Allowed (405):", {
-        attempted: originalRequest?.method?.toUpperCase(),
-        endpoint: originalRequest?.url,
-        allowed: error.response.headers?.allow || "Not specified",
-      });
-
       return Promise.reject(error);
     }
 
-    // Handle token refresh for 400/401 "Invalid token" errors (cookie-based refresh)
-    if (
-      (error.response?.status === 400 || error.response?.status === 401) &&
-      !originalRequest?.url?.includes("/get-token") &&
-      (error.response?.data?.data === "Invalid token" ||
-        error.response?.data?.message?.includes("token")) &&
-      !originalRequest._retry
-    ) {
-      originalRequest._retry = true;
+    // Other 400 errors — log once in dev.
+    if (status === 400 && !_logged.generic400) {
+      if (IS_DEV) console.warn("[API] 400 →", original?.url, errMsg);
+      _logged.generic400 = true;
+    }
 
+    // 405 Method Not Allowed.
+    if (status === 405) {
+      console.error(
+        `[API] 405 ${original?.method?.toUpperCase()} ${original?.url} — ` +
+          `allowed: ${error.response.headers?.allow || "unknown"}`,
+      );
+      return Promise.reject(error);
+    }
+
+    // Token refresh on 400 / 401 "Invalid token".
+    const isTokenError =
+      (status === 400 || status === 401) &&
+      !original?.url?.includes("/get-token") &&
+      (errMsg === "Invalid token" || errMsg.toLowerCase().includes("token")) &&
+      !original._retry;
+
+    if (isTokenError) {
+      original._retry = true;
       try {
-        console.log("🔄 Attempting cookie-based token refresh...");
-
-        // Cookie-based token refresh: GET /get-new-token
-        // Base URL is /api/v1
-        // Server reads refresh token from HttpOnly cookie and sets new JWT cookie
-        const response = await axios.get(`${BASE_URL}/get-new-token`, {
+        if (IS_DEV) console.log("[API] Refreshing token via /get-new-token …");
+        const res = await axios.get(`${BASE_URL}/get-new-token`, {
           withCredentials: true,
           timeout: 10000,
         });
-
-        if (response.data.status === "Success") {
-          console.log("✅ Token refreshed successfully (cookie updated)");
-          // Retry original request - new token is in cookie
-          return api(originalRequest);
+        if (res.data.status === "Success") {
+          if (IS_DEV) console.log("[API] Token refreshed — retrying request.");
+          return api(original);
         }
-      } catch (refreshError) {
-        console.error("❌ Token refresh failed:", refreshError.message);
-        // Clear any local state and session flag to force re-login
+      } catch {
+        // Refresh failed — force full re-login.
         localStorage.clear();
-        sessionStorage.removeItem('factory_session_authenticated');
+        sessionStorage.removeItem("factory_session_authenticated");
         window.location.href = "/";
       }
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;

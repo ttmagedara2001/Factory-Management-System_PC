@@ -4,10 +4,8 @@ import { LineChart, Line, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YA
 import {
   fetchAllHistoricalData,
   getOEEChartData,
-  getDowntimeParetoData,
   getMTBFHours,
   analyzeAlertForDowntime,
-  formatAlertsAsEventLog,
   getTimeRange,
 } from '../services/historicalDataService';
 
@@ -28,8 +26,7 @@ const HistoricalWindow = ({
 }) => {
   const [dateRange, setDateRange] = useState('24h');
   const [granularity, setGranularity] = useState('hourly');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [severityFilter, setSeverityFilter] = useState('all');
+
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showCustomRangeDialog, setShowCustomRangeDialog] = useState(false);
   const [customStartDate, setCustomStartDate] = useState('');
@@ -41,9 +38,7 @@ const HistoricalWindow = ({
     production: true,
     oee: true,
     machinePerformance: true,
-    environmental: true,
-    downtime: true,
-    eventLog: true
+    environmental: true
   });
 
   // Environmental metrics visibility state (AQI is calculated, not graphed)
@@ -79,7 +74,6 @@ const HistoricalWindow = ({
   const [productionData, setProductionData] = useState([]);
   const [oeeData, setOeeData] = useState([{ week: new Date().toISOString().split('T')[0], oee: 0 }]);
   const [downtimeData, setDowntimeData] = useState([]);
-  const eventLogData = formatAlertsAsEventLog(alerts);
 
 
   // Fetch historical data from HTTP API
@@ -180,8 +174,6 @@ const HistoricalWindow = ({
       const lastAlert = alerts[0]; // Most recent alert
       if (lastAlert) {
         analyzeAlertForDowntime(lastAlert, selectedDevice);
-        // Refresh downtime data
-        setDowntimeData(getDowntimeParetoData());
         setMtbfHours(getMTBFHours());
       }
     }
@@ -282,16 +274,6 @@ const HistoricalWindow = ({
       downloadCSV(csv, `environmental_trends_${timestamp}.csv`);
     }
 
-    if (selectedCharts.downtime) {
-      const csv = convertToCSV(downtimeData, ['Cause', 'Occurrences']);
-      downloadCSV(csv, `downtime_analysis_${timestamp}.csv`);
-    }
-
-    if (selectedCharts.eventLog) {
-      const csv = convertToCSV(filteredEvents, ['Timestamp', 'Severity', 'Device', 'Event', 'Code']);
-      downloadCSV(csv, `event_log_${timestamp}.csv`);
-    }
-
     setShowExportDialog(false);
   };
 
@@ -302,14 +284,6 @@ const HistoricalWindow = ({
       setShowCustomRangeDialog(false);
     }
   };
-
-  const filteredEvents = eventLogData.filter(event => {
-    const matchesSearch = event.event?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      event.device?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      event.code?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesSeverity = severityFilter === 'all' || event.severity === severityFilter;
-    return matchesSearch && matchesSeverity;
-  });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PILL BADGE COMPONENT - Compact metadata display
@@ -687,87 +661,6 @@ const HistoricalWindow = ({
         </div>
       </div>
 
-      {/* Downtime Analysis & Event Log */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
-          <SectionHeader icon={AlertTriangle} title="Downtime Causes (Pareto)" iconColor="text-amber-600" />
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={downtimeData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <YAxis type="category" dataKey="cause" tick={{ fontSize: 10, fill: '#94a3b8' }} width={100} />
-              <Tooltip />
-              <Bar dataKey="occurrences" fill="#EF4444" name="Occurrences" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-slate-100 rounded-lg">
-                <Search size={16} className="text-slate-600" />
-              </div>
-              <h3 className="text-sm font-bold text-slate-800 uppercase">Event Log</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-7 pr-3 py-1 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 w-28"
-                />
-              </div>
-              <select
-                value={severityFilter}
-                onChange={(e) => setSeverityFilter(e.target.value)}
-                className="px-2 py-1 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All</option>
-                <option value="Critical">Critical</option>
-                <option value="Warning">Warning</option>
-                <option value="Info">Info</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto max-h-[200px] overflow-y-auto">
-            <table className="w-full text-[10px]">
-              <thead className="bg-slate-100 text-slate-700 font-bold uppercase sticky top-0">
-                <tr>
-                  <th className="p-1.5 text-left">Time</th>
-                  <th className="p-1.5 text-left">Severity</th>
-                  <th className="p-1.5 text-left">Device</th>
-                  <th className="p-1.5 text-left">Event</th>
-                  <th className="p-1.5 text-left">Code</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredEvents.map((event, i) => (
-                  <tr key={i} className="hover:bg-slate-50">
-                    <td className="p-1.5 whitespace-nowrap text-slate-600 font-medium">{event.timestamp}</td>
-                    <td className="p-1.5">
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${event.severity === 'Critical' ? 'bg-red-100 text-red-800' :
-                        event.severity === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
-                        {event.severity}
-                      </span>
-                    </td>
-                    <td className="p-1.5 text-slate-700 font-semibold">{event.device}</td>
-                    <td className="p-1.5 text-slate-600 max-w-[120px] truncate" title={event.event}>{event.event}</td>
-                    <td className="p-1.5 text-slate-500 font-mono">{event.code}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
       {/* Products in Last 24 Hours Section */}
       <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -929,25 +822,7 @@ const HistoricalWindow = ({
                     <span className="text-slate-700">Environmental Trends</span>
                   </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer text-xs">
-                    <input
-                      type="checkbox"
-                      checked={selectedCharts.downtime}
-                      onChange={() => toggleChartSelection('downtime')}
-                      className="w-3 h-3 text-blue-500 rounded"
-                    />
-                    <span className="text-slate-700">Downtime Analysis</span>
-                  </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer text-xs">
-                    <input
-                      type="checkbox"
-                      checked={selectedCharts.eventLog}
-                      onChange={() => toggleChartSelection('eventLog')}
-                      className="w-3 h-3 text-blue-500 rounded"
-                    />
-                    <span className="text-slate-700">Event Log</span>
-                  </label>
                 </div>
               </div>
             </div>

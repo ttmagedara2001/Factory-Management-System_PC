@@ -1,313 +1,246 @@
-// ============================================
-// AUTHENTICATION SERVICE - Cookie-Based Auth
-// ============================================
-// Uses fetch with credentials: 'include' for HttpOnly cookie handling
-// The server sets authentication cookies on successful login
-// ============================================
+/**
+ * @file authService.js — Cookie-based authentication for the Protonest API.
+ *
+ * Flow:
+ *  1. POST /get-token  { email, password }  →  server sets HttpOnly JWT + refresh cookies.
+ *  2. All subsequent Axios requests include cookies automatically (withCredentials).
+ *  3. On token expiry, GET /get-new-token refreshes the JWT cookie silently.
+ *
+ * After a successful /get-token the WebSocket client is unlocked via
+ * webSocketClient.markTokenReady() so it can open its STOMP connection.
+ *
+ * Environment variables (required in .env):
+ *   VITE_API_BASE_URL   — e.g. https://api.protonestconnect.co/api/v1/user
+ *   VITE_AUTH_EMAIL      — Protonest account email
+ *   VITE_AUTH_SECRET_KEY — Secret key from the Protonest dashboard
+ */
 
 import { getApiUrl } from "./api.js";
-const API_URL = getApiUrl();
+import { webSocketClient } from "./webSocketClient.js";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Environment Configuration
-// ═══════════════════════════════════════════════════════════════════════════
+const API_URL = getApiUrl();
+const IS_DEV = import.meta.env.DEV;
+
+// ---------------------------------------------------------------------------
+// Environment helpers
+// ---------------------------------------------------------------------------
+
 const AUTH_EMAIL = import.meta.env.VITE_AUTH_EMAIL;
 const AUTH_SECRET_KEY = import.meta.env.VITE_AUTH_SECRET_KEY;
 
+const REQUIRED_VARS = [
+  ["VITE_AUTH_EMAIL", AUTH_EMAIL],
+  ["VITE_AUTH_SECRET_KEY", AUTH_SECRET_KEY],
+  ["VITE_API_BASE_URL", API_URL],
+];
+
 /**
- * Validate that required environment variables are configured
- * @returns {boolean} True if all required vars are present
+ * Validate that every required environment variable is set.
+ * @returns {boolean} `true` when all variables are present.
  */
 export const validateEnvironmentConfig = () => {
-  const missingVars = [];
-  if (!AUTH_EMAIL) missingVars.push('VITE_AUTH_EMAIL');
-  if (!AUTH_SECRET_KEY) missingVars.push('VITE_AUTH_SECRET_KEY');
-  if (!API_URL) missingVars.push('VITE_API_BASE_URL');
-  if (!import.meta.env.VITE_WS_URL) missingVars.push('VITE_WS_URL');
-
-  if (missingVars.length > 0) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ ENVIRONMENT CONFIGURATION ERROR');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('Missing environment variables:', missingVars.join(', '));
-    console.error('\n💡 TO FIX THIS:');
-    console.error('   1. Create a .env file in the project root');
-    console.error('   2. Add the required variables (see .env.example)');
-    console.error('   3. Restart the development server\n');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  const missing = REQUIRED_VARS.filter(([, v]) => !v).map(([k]) => k);
+  if (missing.length > 0) {
+    console.error(
+      `[Auth] Missing env vars: ${missing.join(", ")}. ` +
+        "Create a .env file (see .env.example) and restart the dev server.",
+    );
     return false;
   }
-
   return true;
 };
 
 /**
- * Get the list of missing environment variables
- * @returns {string[]} Array of missing variable names
+ * Return the names of any missing environment variables.
+ * @returns {string[]}
  */
-export const getMissingEnvVars = () => {
-  const missingVars = [];
-  if (!AUTH_EMAIL) missingVars.push('VITE_AUTH_EMAIL');
-  if (!AUTH_SECRET_KEY) missingVars.push('VITE_AUTH_SECRET_KEY');
-  if (!API_URL) missingVars.push('VITE_API_BASE_URL');
-  if (!import.meta.env.VITE_WS_URL) missingVars.push('VITE_WS_URL');
-  return missingVars;
-};
+export const getMissingEnvVars = () =>
+  REQUIRED_VARS.filter(([, v]) => !v).map(([k]) => k);
+
+// ---------------------------------------------------------------------------
+// Session validation
+// ---------------------------------------------------------------------------
 
 /**
- * Check if user is already authenticated via cookies
- * Makes a lightweight API call to validate existing session
- * 
- * @returns {Promise<boolean>} True if session is valid
+ * Check whether the user already has a valid session cookie.
+ *
+ * Calls GET /get-new-token — if the server responds with a fresh JWT cookie
+ * the session is still valid.
+ *
+ * @returns {Promise<boolean>}
  */
 export const isAuthenticated = async () => {
   try {
-    // Try to refresh the token - if it works, we're authenticated
-    // GET /get-new-token reads refresh cookie and issues new JWT cookie
-    const response = await fetch(`${API_URL}/get-new-token`, {
-      method: 'GET',
-      credentials: 'include', // Send cookies
-      headers: {
-        'Accept': 'application/json',
-      },
+    const res = await fetch(`${API_URL}/get-new-token`, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
     });
 
-    if (response.ok) {
-      const data = await response.json().catch(() => ({}));
-      if (data.status === 'Success') {
-        console.log('🍪 [Auth] Existing cookies validated successfully');
-        return true;
-      }
-    }
+    if (!res.ok) return false;
 
+    const data = await res.json().catch(() => ({}));
+    if (data.status === "Success") {
+      if (IS_DEV) console.log("[Auth] Existing cookies validated.");
+      webSocketClient.markTokenReady(data.data?.jwtToken || null);
+      return true;
+    }
     return false;
-  } catch (error) {
-    console.log('ℹ️ [Auth] No valid session cookies found');
+  } catch {
     return false;
   }
 };
 
+// ---------------------------------------------------------------------------
+// Login
+// ---------------------------------------------------------------------------
+
 /**
- * Login and authenticate with the Protonest API
- * Uses fetch with credentials: 'include' to handle HttpOnly cookies
- * 
- * @param {string} email - User email
- * @param {string} password - Secret key from Protonest dashboard
- * @returns {Promise<{userId: string}>} User ID on success
+ * Authenticate with the Protonest API.
+ *
+ * Uses the native Fetch API with `credentials: "include"` so the browser
+ * stores the HttpOnly cookies returned by the server.
+ *
+ * @param {string} email    — Protonest account email.
+ * @param {string} password — Secret key from the Protonest dashboard.
+ * @returns {Promise<{ userId: string, jwtToken: string|null, refreshToken: string|null }>}
+ * @throws {Error} On network / auth failure.
  */
 export const login = async (email, password) => {
-  try {
-    // Validate input before making request
-    if (!email || !password) {
-      throw new Error("Email and password are required");
+  if (!email || !password) throw new Error("Email and password are required.");
+
+  const cleanEmail = email.trim();
+  const cleanPassword = password.trim();
+
+  if (!cleanEmail.includes("@")) throw new Error("Invalid email format.");
+
+  if (IS_DEV) console.log("[Auth] POST /get-token …");
+
+  // --- Perform the request ---------------------------------------------------
+
+  const response = await fetch(`${API_URL}/get-token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
+  }).catch((err) => {
+    if (err instanceof TypeError && err.message.includes("fetch")) {
+      throw new Error("Network error. Please check your internet connection.");
     }
+    throw err;
+  });
 
-    // Clean and validate email format
-    const cleanEmail = email.trim();
-    const cleanPassword = password.trim();
+  // --- Handle HTTP errors ----------------------------------------------------
 
-    if (!cleanEmail.includes("@")) {
-      throw new Error("Invalid email format");
-    }
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}));
+    const serverMsg = errBody?.data || errBody?.message || "";
 
-    console.log("🔄 Making secure authentication request to:", API_URL);
-    console.log("📋 IMPORTANT: Using secretKey as password (not login password)");
+    const friendlyMessages = {
+      "Invalid email format":
+        "Invalid email format. Please check the email address.",
+      "Invalid credentials":
+        "Invalid credentials. Please verify the email and secretKey from your Protonest dashboard.",
+      "User not found":
+        "User not found. Please check if the email is registered.",
+      "Email not verified":
+        "Email not verified. Please verify your email address first.",
+    };
 
-    console.log("🔄 Attempting /get-token with documented payload structure:", {
-      email: cleanEmail,
-      passwordType: "secretKey",
-      passwordLength: cleanPassword.length,
-    });
-
-    try {
-      // ═══════════════════════════════════════════════════════════════════════
-      // COOKIE-BASED AUTH: Use fetch with credentials: 'include'
-      // This allows the browser to receive and store HttpOnly cookies
-      // Base URL is /api/v1
-      // ═══════════════════════════════════════════════════════════════════════
-      const response = await fetch(`${API_URL}/get-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        credentials: 'include', // ⭐ REQUIRED for HttpOnly cookies
-        body: JSON.stringify({
-          email: cleanEmail,
-          password: cleanPassword,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        
-        if (response.status === 400) {
-          console.error("❌ Authentication failed (400):", {
-            serverResponse: JSON.stringify(errorData, null, 2),
-            possibleCauses: [
-              "Invalid email format - check email address",
-              "Invalid credentials - verify email is registered",
-              "Wrong secretKey - check Protonest dashboard for correct secretKey",
-              "User not found - email not registered in system",
-              "Email not verified - check email verification status",
-            ],
-          });
-
-          if (errorData?.data === "Invalid email format") {
-            throw new Error("Invalid email format. Please check the email address.");
-          } else if (errorData?.data === "Invalid credentials") {
-            throw new Error("Invalid credentials. Please verify the email and secretKey from Protonest dashboard.");
-          } else if (errorData?.data === "User not found") {
-            throw new Error("User not found. Please check if the email is registered in the system.");
-          } else if (errorData?.data === "Email not verified") {
-            throw new Error("Email not verified. Please verify your email address first.");
-          } else {
-            throw new Error(`Authentication failed: ${errorData?.data || "Please verify email and secretKey"}`);
-          }
-        } else if (response.status === 500) {
-          console.error("❌ Server error (500):", errorData);
-          throw new Error("Internal server error. Please try again later.");
-        } else {
-          throw new Error(`Login failed with status ${response.status}`);
-        }
-      }
-
-      // Handle response body - may be empty for cookie-only auth
-      const responseText = await response.text();
-      
-      // If response is empty, assume success (cookies were set)
-      if (!responseText || responseText.trim() === '') {
-        console.log("✅ Login successful (cookie-only response)");
-        console.log("🍪 HttpOnly cookies set - authentication ready");
-        return { 
-          userId: cleanEmail,
-          jwtToken: null,
-          refreshToken: null
-        };
-      }
-
-      // Try to parse JSON response
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.warn("⚠️ Response is not JSON, treating as success:", responseText.substring(0, 100));
-        return { 
-          userId: cleanEmail,
-          jwtToken: null,
-          refreshToken: null
-        };
-      }
-
-      // Check for successful response
-      if (data.status === "Success") {
-        console.log("✅ Login successful, cookies stored by browser");
-        console.log("🍪 HttpOnly cookies set - authentication ready");
-        
-        // Note: With cookie-based auth, we don't need to store tokens
-        // The browser automatically handles HttpOnly cookies
-        // We may still receive tokens in response for backwards compatibility
-        const jwtToken = data.data?.jwtToken;
-        const refreshToken = data.data?.refreshToken;
-
-        if (jwtToken) {
-          console.log("🎫 JWT Token also received (first 30 chars):", jwtToken.substring(0, 30) + "...");
-        }
-
-        return { 
-          userId: cleanEmail,
-          jwtToken: jwtToken || null,
-          refreshToken: refreshToken || null
-        };
-      } else {
-        throw new Error(`Authentication failed: ${data.message || "Unexpected response status"}`);
-      }
-    } catch (error) {
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        console.error("❌ Network error - could not reach API server");
-        throw new Error("Network error. Please check your internet connection.");
-      }
-      throw error;
-    }
-  } catch (error) {
-    console.error("❌ Login process failed:", {
-      message: error.message,
-      email: email?.trim(),
-      hasPassword: !!password,
-      passwordLength: password?.length || 0,
-    });
-    throw error;
+    throw new Error(
+      friendlyMessages[serverMsg] ||
+        `Authentication failed (${response.status}): ${serverMsg || "unknown error"}`,
+    );
   }
+
+  // --- Parse the response body -----------------------------------------------
+
+  const text = await response.text();
+
+  // Empty body → cookie-only auth (no JSON).
+  if (!text || !text.trim()) {
+    if (IS_DEV) console.log("[Auth] Login OK (cookie-only response).");
+    webSocketClient.markTokenReady(null);
+    return { userId: cleanEmail, jwtToken: null, refreshToken: null };
+  }
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    // Non-JSON body but HTTP 200 — treat as success.
+    if (IS_DEV) console.warn("[Auth] Non-JSON 200 body — treating as success.");
+    webSocketClient.markTokenReady(null);
+    return { userId: cleanEmail, jwtToken: null, refreshToken: null };
+  }
+
+  if (IS_DEV) console.log("[Auth] /get-token response:", data);
+
+  // Extract tokens — handle nested ({ data: { jwtToken } }) or flat ({ jwtToken }).
+  const jwtToken = data.data?.jwtToken || data.jwtToken || null;
+  const refreshToken = data.data?.refreshToken || data.refreshToken || null;
+
+  // Determine success: explicit status field, known token fields, or bare 200.
+  const isSuccess =
+    data.status === "Success" ||
+    data.status === "success" ||
+    data.statusCode === 200 ||
+    jwtToken !== null;
+
+  if (!isSuccess && IS_DEV) {
+    console.warn(
+      "[Auth] 200 but unrecognised body shape — treating as success:",
+      data,
+    );
+  }
+
+  webSocketClient.markTokenReady(jwtToken);
+  if (IS_DEV) console.log("[Auth] Login OK.");
+
+  return { userId: cleanEmail, jwtToken, refreshToken };
 };
 
+// ---------------------------------------------------------------------------
+// Auto-login (uses env vars)
+// ---------------------------------------------------------------------------
+
 /**
- * Auto-login using environment variables
- * This is the main entry point for automatic authentication
- * 
- * @returns {Promise<{success: boolean, userId?: string, error?: string}>}
+ * Perform headless login using credentials from .env.
+ *
+ * This is the main entry point called by `<AutoLogin>` in main.jsx.
+ *
+ * @returns {Promise<{ success: boolean, userId?: string, jwtToken?: string|null, error?: string }>}
  */
 export const autoLogin = async () => {
-  console.log("🔑 Attempting auto login...");
-  
-  // Validate environment configuration
+  if (IS_DEV) console.log("[Auth] Auto-login …");
+
   if (!validateEnvironmentConfig()) {
     return {
       success: false,
-      error: 'Missing authentication credentials in environment configuration',
-      missingVars: getMissingEnvVars()
+      error: "Missing authentication credentials in environment configuration.",
+      missingVars: getMissingEnvVars(),
     };
   }
 
-  console.log("📧 Email:", AUTH_EMAIL);
-  console.log("🔐 SecretKey length:", AUTH_SECRET_KEY?.length || 0);
-
   try {
     const authData = await login(AUTH_EMAIL, AUTH_SECRET_KEY);
-    
-    console.log("✅ Auto login successful. Ready for connection.");
 
-    // Store JWT token in localStorage (optional, cookies are primary)
-    if (authData.jwtToken) {
-      try { 
-        localStorage.setItem('jwtToken', authData.jwtToken); 
-      } catch (e) { 
-        console.warn('Failed to persist jwtToken', e); 
-      }
-    }
-
-    if (authData.refreshToken) {
-      try { 
-        localStorage.setItem('refreshToken', authData.refreshToken); 
-      } catch (e) { 
-        console.warn('Failed to persist refreshToken', e); 
-      }
-    }
+    // Persist tokens in localStorage (optional — cookies are primary).
+    if (authData.jwtToken) localStorage.setItem("jwtToken", authData.jwtToken);
+    if (authData.refreshToken)
+      localStorage.setItem("refreshToken", authData.refreshToken);
 
     return {
       success: true,
       userId: authData.userId,
-      jwtToken: authData.jwtToken
+      jwtToken: authData.jwtToken,
     };
-
   } catch (error) {
-    console.error("❌ Auto login failed. Cannot connect to services.");
-    console.error("Auto login error details:", error.message);
+    console.error("[Auth] Auto-login failed:", error.message);
 
-    if (error.message.includes("Invalid credentials")) {
-      console.error("🔧 Credentials may be incorrect or expired. Please verify from Protonest dashboard");
-    }
+    localStorage.removeItem("jwtToken");
+    localStorage.removeItem("refreshToken");
 
-    // Clear any existing tokens from localStorage
-    try { 
-      localStorage.removeItem('jwtToken'); 
-      localStorage.removeItem('refreshToken'); 
-    } catch (e) { 
-      console.warn('Failed to remove tokens', e); 
-    }
-
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };

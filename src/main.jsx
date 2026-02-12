@@ -5,24 +5,10 @@ import './index.css';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from './Context/AuthContext.jsx';
 import { autoLogin, getMissingEnvVars } from "./services/authService.js";
+import { webSocketClient } from "./services/webSocketClient.js";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Session tracking key - ensures login happens only ONCE per browser session
-// ═══════════════════════════════════════════════════════════════════════════
 const SESSION_AUTH_KEY = 'factory_session_authenticated';
 
-/**
- * AutoLogin Component
- * 
- * Flow:
- * 1. First, call /get-token API to authenticate
- * 2. If authentication succeeds, render App (which then connects WebSocket)
- * 3. If authentication fails, show error and do NOT render App
- * 
- * WebSocket topics subscribed after connection:
- * - /topic/stream/<deviceID>
- * - /topic/state/<deviceID>
- */
 const AutoLogin = ({ children }) => {
   const { setAuth } = useAuth();
   const [isLoading, setIsLoading] = React.useState(true);
@@ -33,45 +19,29 @@ const AutoLogin = ({ children }) => {
     let isMounted = true;
 
     const performLogin = async () => {
-      // ═══════════════════════════════════════════════════════════════════════
-      // CHECK: Already authenticated in this session?
-      // ═══════════════════════════════════════════════════════════════════════
       const sessionAuthenticated = sessionStorage.getItem(SESSION_AUTH_KEY);
       const storedUserId = localStorage.getItem('userId');
 
       if (sessionAuthenticated === 'true' && storedUserId) {
-        console.log('✅ [Auth] Session already authenticated, skipping /get-token');
         if (isMounted) {
-          setAuth({
-            userId: storedUserId,
-            jwtToken: localStorage.getItem('jwtToken') || null
-          });
+          const storedToken = localStorage.getItem('jwtToken') || null;
+          setAuth({ userId: storedUserId, jwtToken: storedToken });
+          // Unlock WebSocket for returning sessions (cookies still valid)
+          webSocketClient.markTokenReady(storedToken);
           setIsAuthenticated(true);
           setIsLoading(false);
         }
         return;
       }
 
-      // ═══════════════════════════════════════════════════════════════════════
-      // STEP 1: Call /get-token API to authenticate
-      // ═══════════════════════════════════════════════════════════════════════
-      console.log('🔐 [Auth] Calling /get-token API...');
       const result = await autoLogin();
-
       if (!isMounted) return;
 
       if (result.success) {
-        // Login successful - mark session and allow App to render
         sessionStorage.setItem(SESSION_AUTH_KEY, 'true');
-        setAuth({
-          userId: result.userId,
-          jwtToken: result.jwtToken
-        });
+        setAuth({ userId: result.userId, jwtToken: result.jwtToken });
         setIsAuthenticated(true);
-        console.log('✅ [Auth] Authentication successful, proceeding to WebSocket connection');
       } else {
-        // Login failed - show error, do NOT render App
-        console.error('❌ [Auth] Authentication failed:', result.error);
         sessionStorage.removeItem(SESSION_AUTH_KEY);
         setAuth({ userId: null, jwtToken: null });
         setIsAuthenticated(false);
@@ -82,13 +52,9 @@ const AutoLogin = ({ children }) => {
     };
 
     performLogin();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, []);
 
-  // Loading state - waiting for /get-token response
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
@@ -101,7 +67,6 @@ const AutoLogin = ({ children }) => {
     );
   }
 
-  // Error state - authentication failed
   if (error) {
     const missingVars = getMissingEnvVars();
     return (
@@ -133,17 +98,7 @@ const AutoLogin = ({ children }) => {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // STEP 2: Authentication successful - render App
-  // App will then connect WebSocket and subscribe to:
-  // - /topic/stream/<deviceID>
-  // - /topic/state/<deviceID>
-  // ═══════════════════════════════════════════════════════════════════════════
-  if (isAuthenticated) {
-    return children;
-  }
-
-  return null;
+  return isAuthenticated ? children : null;
 };
 
 ReactDOM.createRoot(document.getElementById('root')).render(

@@ -1,36 +1,22 @@
-// ============================================
-// FACTORY MANAGEMENT SYSTEM - DEVICE SERVICE
-// ============================================
-// HTTP API service layer for ProtoNest backend integration
-// Handles all REST API calls for sensor data and machine control
-// Uses API URL from api.js (do not hardcode BASE_URL)
-//
-// Architecture:
-// - api.js: Axios instance with JWT interceptors
-// - deviceService.js: Business logic functions (this file)
-// - Components: Call functions from this file
-//
-// Factory Sensors (Stream Data):
-// - vibration: Machine vibration levels (mm/s)
-// - pressure: System pressure (Pa)
-// - temperature: Ambient temperature (°C)
-// - humidity: Relative humidity (%)
-// - noise: Noise level (dB)
-// - aqi: Air Quality Index (0-500)
-// - pm25: Particulate Matter 2.5 (μg/m³)
-// - co2: Carbon Dioxide levels (ppm)
-// - units: Production unit count
-//
-// Machine States (Control Data):
-// - machine_control: RUN/STOP/IDLE status
-// - ventilation_mode: auto/manual ventilation control
-// ============================================
+/**
+ * @file deviceService.js — REST API service for device operations.
+ *
+ * Wraps all HTTP calls to the Protonest backend for:
+ *  • Sensor / stream data   — vibration, pressure, temperature, etc.
+ *  • Device state management — machineControl, ventilation.
+ *  • Product tracking        — unit counts from `fmc/products` topic.
+ *
+ * Every function uses the shared Axios instance from api.js which handles
+ * cookie auth, token refresh, and base-URL resolution automatically.
+ *
+ * MQTT topic convention (for API payloads):
+ *   Stream  → "fmc/<sensor>"   e.g. "fmc/vibration", "fmc/products"
+ *   State   → "fmc/<control>"  e.g. "fmc/machineControl", "fmc/ventilation"
+ */
 
 import api from "./api.js";
 
-// ============================================
-// PRIMARY API FUNCTIONS - FACTORY SYSTEM
-// ============================================
+const IS_DEV = import.meta.env.DEV;
 
 /**
  * Get historical stream data for all sensor topics of a factory device
@@ -84,42 +70,29 @@ export const getStreamDataForDevice = async (
   startTime,
   endTime,
   pagination = 0,
-  pageSize = 100
+  pageSize = 100,
 ) => {
   try {
-    console.log(
-      `📊 [HTTP API] Fetching historical stream data for ${deviceId}`
-    );
-    console.log(`⏰ [HTTP API] Time range: ${startTime} to ${endTime}`);
-
     const response = await api.post("/get-stream-data/device", {
       deviceId,
       startTime,
       endTime,
-      pagination: pagination.toString(), // API requires string format
-      pageSize: pageSize.toString(), // API requires string format
+      pagination: pagination.toString(),
+      pageSize: pageSize.toString(),
     });
 
-    if (response.data.status === "Success") {
-      const recordCount = response.data.data?.length || 0;
+    if (IS_DEV && response.data.status === "Success") {
       console.log(
-        `✅ [HTTP API] Retrieved ${recordCount} historical records for ${deviceId}`
+        `[Device] Stream data: ${response.data.data?.length || 0} records for ${deviceId}`,
       );
-
-      // Log sample data point for debugging
-      if (recordCount > 0) {
-        console.log(`📋 [HTTP API] Sample data point:`, response.data.data[0]);
-      }
     }
 
     return response.data;
   } catch (error) {
-    console.error(`❌ [HTTP API] Failed to get stream data for ${deviceId}:`, {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      message: error.message,
-      endpoint: "/get-stream-data/device",
-    });
+    console.error(
+      `[Device] Failed to get stream data for ${deviceId}:`,
+      error.message,
+    );
     throw error;
   }
 };
@@ -150,29 +123,12 @@ export const getStreamDataForDevice = async (
  */
 export const getStateDetailsForDevice = async (deviceId) => {
   try {
-    console.log(`🎛️ [HTTP API] Fetching state details for ${deviceId}`);
-
-    const response = await api.post("/get-state-details/device", {
-      deviceId,
-    });
-
-    if (response.data.status === "Success") {
-      console.log(
-        `✅ [HTTP API] Retrieved state details for ${deviceId}:`,
-        response.data.data
-      );
-    }
-
+    const response = await api.post("/get-state-details/device", { deviceId });
     return response.data;
   } catch (error) {
     console.error(
-      `❌ [HTTP API] Failed to get device states for ${deviceId}:`,
-      {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        message: error.message,
-        endpoint: "/get-state-details/device",
-      }
+      `[Device] Failed to get state for ${deviceId}:`,
+      error.message,
     );
     throw error;
   }
@@ -208,13 +164,7 @@ export const getStateDetailsForDevice = async (deviceId) => {
  */
 export const updateStateDetails = async (deviceId, topic, payload) => {
   try {
-    // Ensure topic has the correct fmc/ prefix
     const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
-
-    console.log(
-      `🎛️ [HTTP API] Updating state for ${deviceId}/${formattedTopic}:`,
-      payload
-    );
 
     const response = await api.post("/update-state-details", {
       deviceId,
@@ -222,31 +172,21 @@ export const updateStateDetails = async (deviceId, topic, payload) => {
       payload,
     });
 
-    if (response.data.status === "Success") {
-      console.log(
-        `✅ [HTTP API] Successfully updated ${formattedTopic} for ${deviceId}`
-      );
-    }
-
+    if (IS_DEV)
+      console.log(`[Device] Updated ${formattedTopic} for ${deviceId}`);
     return response.data;
   } catch (error) {
     console.error(
-      `❌ [HTTP API] Failed to update state ${formattedTopic} for ${deviceId}:`,
-      {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        message: error.message,
-        endpoint: "/update-state-details",
-        payload: payload,
-      }
+      `[Device] Failed to update ${topic} for ${deviceId}:`,
+      error.message,
     );
     throw error;
   }
 };
 
-// ============================================
-// MACHINE CONTROL API FUNCTIONS
-// ============================================
+// ---------------------------------------------------------------------------
+// Machine control commands
+// ---------------------------------------------------------------------------
 
 /**
  * Send machine control command (RUN/STOP/IDLE) via HTTP API
@@ -276,46 +216,29 @@ export const updateStateDetails = async (deviceId, topic, payload) => {
  * await sendMachineCommand("devicetestuc", "IDLE");
  */
 export const sendMachineCommand = async (deviceId, command) => {
-  // Validate command
   const validCommands = ["RUN", "STOP", "IDLE"];
   const normalizedCommand = command?.toUpperCase();
 
   if (!validCommands.includes(normalizedCommand)) {
-    console.error(
-      `❌ [Machine Control] Invalid command: ${command}. Valid commands: ${validCommands.join(", ")}`
+    throw new Error(
+      `Invalid machine command: ${command}. Valid: ${validCommands.join(", ")}`,
     );
-    throw new Error(`Invalid machine command: ${command}`);
   }
+  if (!deviceId) throw new Error("Device ID is required for machine control.");
 
-  if (!deviceId) {
-    console.error("❌ [Machine Control] Device ID is required");
-    throw new Error("Device ID is required for machine control");
-  }
+  const payload = {
+    status: normalizedCommand,
+    timestamp: new Date().toISOString(),
+  };
+  const response = await updateStateDetails(
+    deviceId,
+    "machineControl",
+    payload,
+  );
 
-  console.log(`⚙️ [Machine Control] Sending ${normalizedCommand} command to ${deviceId}`);
-
-  try {
-    // Use updateStateDetails with machineControl topic
-    const payload = {
-      status: normalizedCommand,
-      timestamp: new Date().toISOString(),
-    };
-
-    const response = await updateStateDetails(deviceId, "machineControl", payload);
-
-    console.log(`✅ [Machine Control] Command ${normalizedCommand} sent successfully to ${deviceId}`);
-
-    return response;
-  } catch (error) {
-    console.error(
-      `❌ [Machine Control] Failed to send ${normalizedCommand} to ${deviceId}:`,
-      {
-        status: error.response?.status,
-        message: error.message,
-      }
-    );
-    throw error;
-  }
+  if (IS_DEV)
+    console.log(`[Device] Machine command ${normalizedCommand} → ${deviceId}`);
+  return response;
 };
 
 /**
@@ -326,53 +249,37 @@ export const sendMachineCommand = async (deviceId, command) => {
  * @param {string} mode - "manual" or "auto"
  * @returns {Promise<Object>} Response from API
  */
-export const sendVentilationCommand = async (deviceId, state, mode = "manual") => {
+export const sendVentilationCommand = async (
+  deviceId,
+  state,
+  mode = "manual",
+) => {
   const validStates = ["on", "off"];
   const normalizedState = state?.toLowerCase();
 
   if (!validStates.includes(normalizedState)) {
-    console.error(
-      `❌ [Ventilation] Invalid state: ${state}. Valid states: ${validStates.join(", ")}`
+    throw new Error(
+      `Invalid ventilation state: ${state}. Valid: ${validStates.join(", ")}`,
     );
-    throw new Error(`Invalid ventilation state: ${state}`);
   }
+  if (!deviceId)
+    throw new Error("Device ID is required for ventilation control.");
 
-  if (!deviceId) {
-    console.error("❌ [Ventilation] Device ID is required");
-    throw new Error("Device ID is required for ventilation control");
-  }
+  const payload = {
+    ventilation: normalizedState,
+    mode,
+    timestamp: new Date().toISOString(),
+  };
 
-  console.log(`🌀 [Ventilation] Sending ${normalizedState} command to ${deviceId} (mode: ${mode})`);
-
-  try {
-    const payload = {
-      ventilation: normalizedState,
-      mode: mode,
-      timestamp: new Date().toISOString(),
-    };
-
-    const response = await updateStateDetails(deviceId, "ventilation", payload);
-
-    console.log(`✅ [Ventilation] Command ${normalizedState} sent successfully to ${deviceId}`);
-
-    return response;
-  } catch (error) {
-    console.error(
-      `❌ [Ventilation] Failed to send ${normalizedState} to ${deviceId}:`,
-      {
-        status: error.response?.status,
-        message: error.message,
-      }
-    );
-    throw error;
-  }
+  const response = await updateStateDetails(deviceId, "ventilation", payload);
+  if (IS_DEV)
+    console.log(`[Device] Ventilation ${normalizedState} → ${deviceId}`);
+  return response;
 };
 
-// ============================================
-// TOPIC-SPECIFIC API FUNCTIONS
-// ============================================
-// These functions query individual sensor topics rather than all topics at once
-// Useful for: debugging, specific sensor analysis, selective data loading
+// ---------------------------------------------------------------------------
+// Topic-specific queries
+// ---------------------------------------------------------------------------
 
 /**
  * Get historical stream data for a specific sensor topic
@@ -416,51 +323,31 @@ export const getStreamDataByTopic = async (
   startTime,
   endTime,
   pagination = 0,
-  pageSize = 100
+  pageSize = 100,
 ) => {
   try {
-    // Ensure topic has the correct fmc/ prefix
     const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
-
-    console.log(
-      `📊 [HTTP API] Fetching ${formattedTopic} data for ${deviceId}`
-    );
-    console.log(`⏰ [HTTP API] Time range: ${startTime} to ${endTime}`);
 
     const response = await api.post("/get-stream-data/device/topic", {
       deviceId,
       topic: formattedTopic,
       startTime,
       endTime,
-      pagination: pagination.toString(), // API requires string format
-      pageSize: pageSize.toString(), // API requires string format
+      pagination: pagination.toString(),
+      pageSize: pageSize.toString(),
     });
 
-    if (response.data.status === "Success") {
-      const recordCount = response.data.data?.length || 0;
+    if (IS_DEV && response.data.status === "Success") {
       console.log(
-        `✅ [HTTP API] Retrieved ${recordCount} records for ${formattedTopic}`
+        `[Device] ${formattedTopic}: ${response.data.data?.length || 0} records`,
       );
-
-      // Log sample record for debugging
-      if (recordCount > 0) {
-        console.log(
-          `📋 [HTTP API] Sample ${formattedTopic} record:`,
-          response.data.data[0]
-        );
-      }
     }
 
     return response.data;
   } catch (error) {
     console.error(
-      `❌ [HTTP API] Failed to get ${formattedTopic} data for ${deviceId}:`,
-      {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        message: error.message,
-        endpoint: "/get-stream-data/device/topic",
-      }
+      `[Device] Failed to get ${topic} for ${deviceId}:`,
+      error.message,
     );
     throw error;
   }
@@ -497,111 +384,39 @@ export const getStreamDataByTopic = async (
  */
 export const getStateDetailsByTopic = async (deviceId, topic) => {
   try {
-    // Ensure topic has the correct fmc/ prefix
     const formattedTopic = topic.startsWith("fmc/") ? topic : `fmc/${topic}`;
-
-    console.log(
-      `🎛️ [HTTP API] Fetching ${formattedTopic} state for ${deviceId}`
-    );
 
     const response = await api.post("/get-state-details/device/topic", {
       deviceId,
       topic: formattedTopic,
     });
 
-    if (response.data.status === "Success") {
-      console.log(
-        `✅ [HTTP API] Retrieved ${formattedTopic} state:`,
-        response.data.data
-      );
-    }
-
     return response.data;
   } catch (error) {
     console.error(
-      `❌ [HTTP API] Failed to get ${formattedTopic} state for ${deviceId}:`,
-      {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        message: error.message,
-        endpoint: "/get-state-details/device/topic",
-      }
+      `[Device] Failed to get ${topic} state for ${deviceId}:`,
+      error.message,
     );
     throw error;
   }
 };
 
 /**
- * Get the current production units count for a device from the backend
+ * Get the current production unit count (products in last 24 hours).
  *
- * This fetches all product records from the last 24 hours and counts them.
- * Units = count of products produced within 24 hours.
- * 
- * NOTE: We no longer use a direct 'units' stream topic. Instead:
- * 1. Firmware publishes each product to 'fmc/product' topic
- * 2. Dashboard fetches product records via HTTP API
- * 3. Dashboard counts products = unit count for 24 hours
+ * Units = count of product records published to `fmc/products` in the past 24 h.
  *
- * @param {string} deviceId - Factory device ID
- * @returns {Promise<number>} Current unit count (product count in 24 hours)
+ * @param {string} deviceId
+ * @returns {Promise<number>} Product count (0 on error).
  */
 export const getCurrentUnitsFromBackend = async (deviceId) => {
   try {
-    console.log(`📊 [HTTP API] Fetching products for ${deviceId} to calculate units`);
-
-    // Get products from the last 24 hours
     const now = new Date();
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     const response = await api.post("/get-stream-data/device/topic", {
       deviceId,
-      topic: "fmc/product", // Fetch product records, not units
-      startTime: twentyFourHoursAgo.toISOString(),
-      endTime: now.toISOString(),
-      pagination: "0",
-      pageSize: "10000", // Get all products in 24 hours
-    });
-
-    if (response.data.status === "Success" && response.data.data?.length > 0) {
-      // Count the number of product records = units produced
-      const productCount = response.data.data.length;
-      console.log(`✅ [HTTP API] Products in 24hrs: ${productCount} -> Units: ${productCount}`);
-      return productCount;
-    }
-
-    console.log(
-      `ℹ️ [HTTP API] No product data found for ${deviceId} in last 24 hours, returning 0 units`
-    );
-    return 0;
-  } catch (error) {
-    console.error(
-      `❌ [HTTP API] Failed to get products/units for ${deviceId}:`,
-      {
-        status: error.response?.status,
-        message: error.message,
-      }
-    );
-    // Return 0 on error - don't throw, let the app continue
-    return 0;
-  }
-};
-
-/**
- * Get detailed product list for a device from the last 24 hours
- *
- * @param {string} deviceId - Factory device ID
- * @returns {Promise<{count: number, products: Array}>} Product count and list
- */
-export const getProductsIn24Hours = async (deviceId) => {
-  try {
-    console.log(`📦 [HTTP API] Fetching product details for ${deviceId}`);
-
-    const now = new Date();
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-    const response = await api.post("/get-stream-data/device/topic", {
-      deviceId,
-      topic: "fmc/product",
+      topic: "fmc/products",
       startTime: twentyFourHoursAgo.toISOString(),
       endTime: now.toISOString(),
       pagination: "0",
@@ -609,107 +424,81 @@ export const getProductsIn24Hours = async (deviceId) => {
     });
 
     if (response.data.status === "Success" && response.data.data?.length > 0) {
-      const products = response.data.data.map((record, index) => ({
-        id: index + 1,
-        productID: record.payload?.productID || record.payload?.productId || `PROD-${index + 1}`,
-        productName: record.payload?.productName || "Unknown Product",
-        timestamp: record.timestamp,
-        date: new Date(record.timestamp).toLocaleDateString(),
-        time: new Date(record.timestamp).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        }),
-      }));
-
-      console.log(`✅ [HTTP API] Retrieved ${products.length} products for ${deviceId}`);
-      
-      return {
-        count: products.length,
-        products: products,
-      };
+      const count = response.data.data.length;
+      if (IS_DEV) console.log(`[Device] Units (24h): ${count} for ${deviceId}`);
+      return count;
     }
 
-    console.log(`ℹ️ [HTTP API] No products found for ${deviceId}`);
-    return { count: 0, products: [] };
+    return 0;
   } catch (error) {
-    console.error(`❌ [HTTP API] Failed to get products for ${deviceId}:`, {
-      status: error.response?.status,
-      message: error.message,
-    });
-    return { count: 0, products: [] };
+    console.error(
+      `[Device] Failed to get units for ${deviceId}:`,
+      error.message,
+    );
+    return 0;
   }
 };
 
-// ============================================
-// NOTES
-// ============================================
-//
-// Threshold Management:
-// - Sensor threshold alerts are managed in frontend localStorage only
-// - No backend API available for threshold settings
-// - Thresholds are checked in DashboardHome.jsx against real-time sensor data
-//
-// Data Flow Architecture:
-// 1. Historical Data: HTTP API → getStreamDataForDevice() → Charts
-// 2. Real-time Data: WebSocket → STOMP subscriptions → State updates → Displays
-// 3. Control Commands: User interaction → updateStateDetails() → HTTP API → MQTT broker → Device
-//
-// MQTT Topic Format (for API calls):
-// - Stream data topic: "fmc/<sensor>" (e.g., "fmc/vibration", "fmc/temperature", "fmc/product")
-// - State data topic: "fmc/<control>" (e.g., "fmc/machineControl", "fmc/ventilation")
-//
-// Full MQTT Paths (on broker):
-// - Stream: protonest/<deviceId>/stream/fmc/<sensor>
-// - State: protonest/<deviceId>/state/fmc/<control>
-//
-// ═══════════════════════════════════════════════════════════════════════
-// UNIT COUNT CALCULATION (Product-Based)
-// ═══════════════════════════════════════════════════════════════════════
-// 
-// Units are NOT from a direct 'fmc/units' topic. Instead:
-// 1. Firmware publishes each product scan to 'fmc/product' topic
-// 2. Dashboard fetches products via HTTP API for last 24 hours
-// 3. Dashboard counts product records = unit count
-//
-// Flow:
-//   Firmware → MQTT (fmc/product) → Backend Storage
-//   Dashboard → HTTP GET (fmc/product, 24hrs) → count() = Units
-//
-// Function: getCurrentUnitsFromBackend(deviceId)
-//   - Fetches products from last 24 hours
-//   - Returns: number of products = unit count
-//
-// ═══════════════════════════════════════════════════════════════════════
-// MACHINE CONTROL (State Topic)
-// ═══════════════════════════════════════════════════════════════════════
-//
-// Topic: protonest/<deviceId>/state/fmc/machineControl
-// Payloads: {"status": "RUN"}, {"status": "STOP"}, {"status": "IDLE"}
-//
-// Flow:
-//   1. User clicks button on Dashboard
-//   2. Dashboard calls: updateStateDetails(deviceId, "machineControl", {status: "RUN"})
-//   3. HTTP POST /update-state-details sends to backend
-//   4. ProtoNest publishes to MQTT: protonest/<deviceId>/state/fmc/machineControl
-//   5. Firmware receives command via MQTT subscription
-//   6. Firmware executes: startMachine(), stopMachine(), or setIdle()
-//
-// Testing with MQTTX:
-//   1. Subscribe to: protonest/<deviceId>/state/fmc/#
-//   2. Publish to: protonest/<deviceId>/state/fmc/machineControl
-//      Payload: {"status": "RUN"}
-//   3. Firmware should receive and execute command
-//
-// ═══════════════════════════════════════════════════════════════════════
-//
-// Sensor Threshold Monitoring (Frontend only):
-// - Vibration: Critical > 10 mm/s, Warning > 5 mm/s
-// - Pressure: Critical > 8 bar or < 0.5 bar, Warning > 6 bar
-// - Temperature: Critical > 40°C or < 10°C, Warning > 35°C
-// - Humidity: Warning > 70%
-// - Noise: Critical > 85 dB, Warning > 75 dB
-// - CO2: Critical > 70%, Warning > 45%
-//
-// ============================================
+/**
+ * Get detailed product list for a device from the last 24 hours.
+ *
+ * @param {string} deviceId
+ * @returns {Promise<{ count: number, products: Array }>}
+ */
+export const getProductsIn24Hours = async (deviceId) => {
+  try {
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
+    const response = await api.post("/get-stream-data/device/topic", {
+      deviceId,
+      topic: "fmc/products",
+      startTime: twentyFourHoursAgo.toISOString(),
+      endTime: now.toISOString(),
+      pagination: "0",
+      pageSize: "10000",
+    });
+
+    if (response.data.status === "Success" && response.data.data?.length > 0) {
+      const products = response.data.data.map((record, index) => {
+        const payload = record.payload || record;
+        return {
+          id: index + 1,
+          productID:
+            payload.productID ||
+            payload.productId ||
+            payload.product_id ||
+            record.productID ||
+            record.productId ||
+            `PROD-${index + 1}`,
+          productName:
+            payload.productName ||
+            payload.product_name ||
+            record.productName ||
+            "Unknown Product",
+          timestamp: record.timestamp,
+          date: new Date(record.timestamp).toLocaleDateString(),
+          time: new Date(record.timestamp).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+        };
+      });
+
+      if (IS_DEV)
+        console.log(
+          `[Device] Products (24h): ${products.length} for ${deviceId}`,
+        );
+      return { count: products.length, products };
+    }
+
+    return { count: 0, products: [] };
+  } catch (error) {
+    console.error(
+      `[Device] Failed to get products for ${deviceId}:`,
+      error.message,
+    );
+    return { count: 0, products: [] };
+  }
+};
