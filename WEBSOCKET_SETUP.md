@@ -3,6 +3,7 @@
 ## Overview
 
 The Factory Management System uses a combination of:
+
 - **WebSocket (STOMP)** for real-time sensor data streaming
 - **HTTP API** for authentication, historical data, and device control commands
 - **Cookie-based authentication** with HttpOnly cookies for security
@@ -47,15 +48,15 @@ The system uses HttpOnly cookies for secure authentication:
 ```javascript
 // POST /get-token
 const response = await fetch(`${API_URL}/get-token`, {
-  method: 'POST',
+  method: "POST",
   headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    "Content-Type": "application/json",
+    Accept: "application/json",
   },
-  credentials: 'include', // ⭐ Required for HttpOnly cookies
+  credentials: "include", // ⭐ Required for HttpOnly cookies
   body: JSON.stringify({
-    email: 'user@example.com',
-    password: 'secret-key-from-protonest', // Use secretKey, NOT login password
+    email: "user@example.com",
+    password: "secret-key-from-protonest", // Use secretKey, NOT login password
   }),
 });
 ```
@@ -89,20 +90,20 @@ No query parameters needed - authentication is handled via cookies.
 The WebSocket uses STOMP (Simple Text Oriented Messaging Protocol):
 
 ```javascript
-import { Client } from '@stomp/stompjs';
+import { Client } from "@stomp/stompjs";
 
 const stompClient = new Client({
-  brokerURL: 'wss://api.protonestconnect.co/ws',
+  brokerURL: "wss://api.protonestconnect.co/ws",
   connectHeaders: {},
   reconnectDelay: 5000,
   heartbeatIncoming: 4000,
   heartbeatOutgoing: 4000,
   onConnect: () => {
-    console.log('WebSocket connected');
+    console.log("WebSocket connected");
     // Subscribe to topics
   },
   onWebSocketClose: () => {
-    console.log('WebSocket disconnected');
+    console.log("WebSocket disconnected");
   },
 });
 
@@ -125,6 +126,7 @@ stompClient.activate();
 ### Incoming Message Format
 
 **Stream Data** (from `/topic/stream/<deviceId>`):
+
 ```json
 {
   "payload": { "temperature": "25.5" },
@@ -134,6 +136,7 @@ stompClient.activate();
 ```
 
 **State Data** (from `/topic/state/<deviceId>`):
+
 ```json
 {
   "payload": { "status": "RUN" },
@@ -144,24 +147,26 @@ stompClient.activate();
 
 ### Supported Stream Topics
 
-| Topic Suffix | Sensor | Unit |
-|--------------|--------|------|
-| `fmc/temperature` | Temperature | °C |
-| `fmc/humidity` | Humidity | % |
-| `fmc/vibration` | Vibration | mm/s |
-| `fmc/pressure` | Pressure | Pa |
-| `fmc/noise` | Noise Level | dB |
-| `fmc/co2` | CO2 | % |
-| `fmc/units` | Unit Count | count |
-| `fmc/product` | Product Scan | JSON |
+| Topic Suffix      | Sensor       | Unit    |
+| ----------------- | ------------ | ------- |
+| `fmc/temperature` | Temperature  | °C      |
+| `fmc/humidity`    | Humidity     | %       |
+| `fmc/vibration`   | Vibration    | mm/s    |
+| `fmc/pressure`    | Pressure     | **bar** |
+| `fmc/noise`       | Noise Level  | dB      |
+| `fmc/co2`         | CO2          | %       |
+| `fmc/product`     | Product Scan | JSON    |
+
+> ⚠️ `fmc/aqi` and `fmc/units` are **not** published by devices — AQI is calculated client-side; units are counted from `fmc/product` records.
 
 ### Supported State Topics
 
-| Topic Suffix | Control | Values |
-|--------------|---------|--------|
-| `fmc/machineControl` | Machine Control | RUN, STOP, IDLE |
-| `fmc/ventilation` | Ventilation | on, off, auto |
-| `fmc/emergencyStop` | Emergency Stop | true/false |
+| Topic Suffix         | Control               | Values                                            |
+| -------------------- | --------------------- | ------------------------------------------------- | ----------------------- | -------- |
+| `fmc/machineControl` | Machine Control       | `{"status": "RUN"                                 | "STOP"                  | "IDLE"}` |
+| `fmc/ventilation`    | Ventilation           | `{"ventilation": "on"                             | "off", "mode": "manual" | "auto"}` |
+| `fmc/emergencyStop`  | Emergency Stop/Resume | `{"emergencyStop": true\|false, "reason": "..."}` |
+| `fmc/controlMode`    | Control Mode          | `{"controlMode": "manual"                         | "auto"}`                |
 
 ---
 
@@ -175,28 +180,28 @@ https://api.protonestconnect.co/api/v1
 
 ### Authentication
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/get-token` | Login and get auth cookie |
-| GET | `/get-new-token` | Refresh token (cookie-based) |
+| Method | Endpoint         | Description                  |
+| ------ | ---------------- | ---------------------------- |
+| POST   | `/get-token`     | Login and get auth cookie    |
+| GET    | `/get-new-token` | Refresh token (cookie-based) |
 
 ### Device Data - Stream
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/get-stream-data/device` | Get all stream data for a device |
-| POST | `/get-stream-data/device/topic` | Get stream data for specific topic |
-| POST | `/get-stream-data/user` | Get all stream data for user |
-| DELETE | `/delete-stream-data-by-id` | Delete stream data by IDs |
+| Method | Endpoint                        | Description                        |
+| ------ | ------------------------------- | ---------------------------------- |
+| POST   | `/get-stream-data/device`       | Get all stream data for a device   |
+| POST   | `/get-stream-data/device/topic` | Get stream data for specific topic |
+| POST   | `/get-stream-data/user`         | Get all stream data for user       |
+| DELETE | `/delete-stream-data-by-id`     | Delete stream data by IDs          |
 
 ### Device Data - State
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/get-state-details/device` | Get all state details for device |
-| POST | `/get-state-details/device/topic` | Get state for specific topic |
-| POST | `/update-state-details` | **Send control command to device** |
-| DELETE | `/delete-state-topic` | Delete state topic |
+| Method | Endpoint                          | Description                        |
+| ------ | --------------------------------- | ---------------------------------- |
+| POST   | `/get-state-details/device`       | Get all state details for device   |
+| POST   | `/get-state-details/device/topic` | Get state for specific topic       |
+| POST   | `/update-state-details`           | **Send control command to device** |
+| DELETE | `/delete-state-topic`             | Delete state topic                 |
 
 ---
 
@@ -207,11 +212,11 @@ https://api.protonestconnect.co/api/v1
 ```javascript
 const response = await api.post("/get-stream-data/device/topic", {
   deviceId: "devicetestuc",
-  topic: "fmc/temperature",  // Just the suffix, not full MQTT path
+  topic: "fmc/temperature", // Just the suffix, not full MQTT path
   startTime: "2026-01-20T00:00:00Z",
   endTime: "2026-01-22T23:59:59Z",
   pagination: "0",
-  pageSize: "100"
+  pageSize: "100",
 });
 ```
 
@@ -228,7 +233,7 @@ const response = await api.post("/get-stream-data/device/topic", {
   startTime: startOfDay.toISOString(),
   endTime: now.toISOString(),
   pagination: "0",
-  pageSize: "100"
+  pageSize: "100",
 });
 ```
 
@@ -241,10 +246,49 @@ await api.post("/update-state-details", {
   deviceId: "devicetestuc",
   topic: "fmc/ventilation",
   payload: {
-    ventilation: "on",      // "on", "off", or "auto"
-    mode: "manual",         // "manual" or "auto"
-    timestamp: new Date().toISOString()
-  }
+    ventilation: "on", // "on", "off", or "auto"
+    mode: "manual", // "manual" or "auto"
+    timestamp: new Date().toISOString(),
+  },
+});
+```
+
+### Send Emergency Stop Command
+
+```javascript
+// Stop — publishes to fmc/emergencyStop
+await api.post("/update-state-details", {
+  deviceId: "devicetestuc",
+  topic: "fmc/emergencyStop",
+  payload: {
+    emergencyStop: true,
+    reason: "EMERGENCY STOP",
+    timestamp: new Date().toISOString(),
+  },
+});
+
+// Resume — same topic, emergencyStop: false
+await api.post("/update-state-details", {
+  deviceId: "devicetestuc",
+  topic: "fmc/emergencyStop",
+  payload: {
+    emergencyStop: false,
+    reason: "RESUMED",
+    timestamp: new Date().toISOString(),
+  },
+});
+```
+
+### Send Control Mode Command
+
+```javascript
+await api.post("/update-state-details", {
+  deviceId: "devicetestuc",
+  topic: "fmc/controlMode",
+  payload: {
+    controlMode: "manual", // or "auto"
+    timestamp: new Date().toISOString(),
+  },
 });
 ```
 
@@ -255,8 +299,8 @@ await api.post("/update-state-details", {
   deviceId: "devicetestuc",
   topic: "fmc/machineControl",
   payload: {
-    status: "RUN"  // "RUN", "STOP", or "IDLE"
-  }
+    status: "RUN", // "RUN", "STOP", or "IDLE"
+  },
 });
 ```
 
@@ -277,7 +321,7 @@ function calculateAQI(temperature, humidity, co2) {
   } else if (temperature > 25) {
     tempScore = Math.max(0, 100 - (temperature - 25) * 5);
   }
-  
+
   // Humidity Score (optimal: 40-60%)
   let humidityScore = 100;
   if (humidity < 40) {
@@ -285,26 +329,26 @@ function calculateAQI(temperature, humidity, co2) {
   } else if (humidity > 60) {
     humidityScore = Math.max(0, 100 - (humidity - 60) * 2);
   }
-  
+
   // CO2 Score (optimal: <45%)
   let co2Score = 100;
   if (co2 >= 45) {
     co2Score = Math.max(0, 100 - (co2 - 45) * 2);
   }
-  
+
   // Weighted average
-  const aqi = (tempScore * 0.30) + (humidityScore * 0.30) + (co2Score * 0.40);
+  const aqi = tempScore * 0.3 + humidityScore * 0.3 + co2Score * 0.4;
   return Math.round(aqi);
 }
 ```
 
 ### Result Scale
 
-| Score | Status | Color |
-|-------|--------|-------|
-| 75-100 | Good | Green |
-| 50-74 | Fair | Yellow |
-| 0-49 | Poor | Red |
+| Score  | Status | Color  |
+| ------ | ------ | ------ |
+| 75-100 | Good   | Green  |
+| 50-74  | Fair   | Yellow |
+| 0-49   | Poor   | Red    |
 
 ---
 
@@ -318,7 +362,7 @@ const wsClient = new WebSocketClient(
   WS_URL,
   (data) => handleWebSocketData(data),
   () => onWebSocketConnect(),
-  () => onWebSocketDisconnect()
+  () => onWebSocketDisconnect(),
 );
 
 // Subscribe to device
@@ -326,10 +370,10 @@ wsClient.subscribe(deviceId);
 
 // Handle incoming data
 function handleWebSocketData(data) {
-  if (data.topic?.startsWith('fmc/')) {
-    setSensorData(prev => ({
+  if (data.topic?.startsWith("fmc/")) {
+    setSensorData((prev) => ({
       ...prev,
-      [topicName]: parseFloat(data.payload[topicName])
+      [topicName]: parseFloat(data.payload[topicName]),
     }));
   }
 }
@@ -340,14 +384,14 @@ function handleWebSocketData(data) {
 ```javascript
 // Ventilation toggle uses HTTP API directly
 const handleVentilationToggle = async () => {
-  const command = ventilation ? 'off' : 'on';
-  
-  await updateStateDetails(selectedDevice, 'ventilation', {
+  const command = ventilation ? "off" : "on";
+
+  await updateStateDetails(selectedDevice, "ventilation", {
     ventilation: command,
     mode: controlMode,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
-  
+
   setVentilation(!ventilation);
 };
 ```
@@ -410,6 +454,7 @@ const handleVentilationToggle = async () => {
 **Problem**: Login fails with CORS error
 
 **Solutions**:
+
 - Ensure `credentials: 'include'` is set in fetch requests
 - Verify the API server allows credentials from your origin
 - Check that base URL doesn't have duplicate `/user/` segments
@@ -417,6 +462,7 @@ const handleVentilationToggle = async () => {
 **Problem**: 403 Forbidden on API calls
 
 **Solutions**:
+
 - Cookies may have expired - try refreshing token
 - Check that `withCredentials: true` is set in axios
 - Verify the endpoint path includes `/user/` prefix (base URL is /api/v1, endpoints are /user/...)
@@ -426,6 +472,7 @@ const handleVentilationToggle = async () => {
 **Problem**: WebSocket disconnects frequently
 
 **Solutions**:
+
 - Check heartbeat configuration
 - Verify auth cookies are valid
 - Enable auto-reconnect logic
@@ -433,6 +480,7 @@ const handleVentilationToggle = async () => {
 **Problem**: No data received
 
 **Solutions**:
+
 - Verify subscription to correct topic format: `/topic/stream/<deviceId>`
 - Check device is publishing to correct MQTT topics
 - Ensure device ID is case-sensitive match
@@ -442,6 +490,7 @@ const handleVentilationToggle = async () => {
 **Problem**: Sensor values showing as "--"
 
 **Solutions**:
+
 - Device not publishing data yet
 - Topic format mismatch
 - Check browser console for errors
@@ -460,6 +509,7 @@ VITE_DEVICE_ID = devicetestuc
 ```
 
 **Note**: All endpoints are directly under `/api/v1` (no `/user/` prefix):
+
 - ✓ `/get-token` (correct)
 - ✓ `/get-stream-data/device/topic` (correct)
 - ✓ `/update-state-details` (correct)
@@ -476,6 +526,7 @@ src/
 │   ├── authService.js           # Login, logout, token refresh
 │   ├── deviceService.js         # Device data & control API calls
 │   ├── historicalDataService.js # Historical data fetching
+│   ├── productionService.js     # Production/unit tracking
 │   └── webSocketClient.js       # STOMP WebSocket client
 └── Components/
     ├── Header.jsx               # Device selector
@@ -487,6 +538,6 @@ src/
 
 ---
 
-**Document Version**: 4.0  
-**Last Updated**: February 10, 2026  
-**Compatible with**: Factory Management System v4.0 (Simplified API)
+**Document Version**: 4.2  
+**Last Updated**: February 18, 2026  
+**Compatible with**: Factory Management System v4.2 (Emergency Stop + Control Mode topics)

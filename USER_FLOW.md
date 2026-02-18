@@ -106,23 +106,23 @@ This is a **React/Vite** web application for monitoring and controlling factory 
 
 All HTTP requests are now centralized:
 
-| File | Responsibility |
-|------|----------------|
-| `api.js` | Axios instance with JWT interceptors, token refresh |
-| `authService.js` | Login authentication only |
-| `deviceService.js` | All device/sensor API operations |
+| File               | Responsibility                                      |
+| ------------------ | --------------------------------------------------- |
+| `api.js`           | Axios instance with JWT interceptors, token refresh |
+| `authService.js`   | Login authentication only                           |
+| `deviceService.js` | All device/sensor API operations                    |
 
 ### Endpoint Summary
 
-| # | Method | Endpoint | Location | Purpose |
-|---|--------|----------|----------|---------|
-| 1 | `POST` | `/get-token` | `authService.js` | User login |
-| 2 | `POST` | `/get-new-token` | `api.js` (interceptor) | Auto token refresh |
-| 3 | `POST` | `/get-stream-data/device` | `deviceService.js` | Get all sensor data |
-| 4 | `POST` | `/get-stream-data/device/topic` | `deviceService.js` | Get specific sensor |
-| 5 | `POST` | `/get-state-details/device` | `deviceService.js` | Get device states |
-| 6 | `POST` | `/get-state-details/device/topic` | `deviceService.js` | Get specific state |
-| 7 | `POST` | `/update-state-details` | `deviceService.js` | Control device |
+| #   | Method | Endpoint                          | Location               | Purpose             |
+| --- | ------ | --------------------------------- | ---------------------- | ------------------- |
+| 1   | `POST` | `/get-token`                      | `authService.js`       | User login          |
+| 2   | `POST` | `/get-new-token`                  | `api.js` (interceptor) | Auto token refresh  |
+| 3   | `POST` | `/get-stream-data/device`         | `deviceService.js`     | Get all sensor data |
+| 4   | `POST` | `/get-stream-data/device/topic`   | `deviceService.js`     | Get specific sensor |
+| 5   | `POST` | `/get-state-details/device`       | `deviceService.js`     | Get device states   |
+| 6   | `POST` | `/get-state-details/device/topic` | `deviceService.js`     | Get specific state  |
+| 7   | `POST` | `/update-state-details`           | `deviceService.js`     | Control device      |
 
 ---
 
@@ -158,6 +158,7 @@ All HTTP requests are now centralized:
 ## 📊 Data Flow
 
 ### Real-time Data (WebSocket)
+
 ```
 IoT Device ──▸ MQTT Broker ──▸ Backend ──▸ WebSocket ──▸ React App
                                               │
@@ -169,6 +170,7 @@ IoT Device ──▸ MQTT Broker ──▸ Backend ──▸ WebSocket ──▸
 ```
 
 ### Historical Data (HTTP)
+
 ```
 React App ──▸ POST /get-stream-data/device ──▸ Backend ──▸ Database
                         │
@@ -183,14 +185,14 @@ React App ──▸ POST /get-stream-data/device ──▸ Backend ──▸ Dat
 
 ## 🖥️ UI Components
 
-| Component | Purpose |
-|-----------|---------|
-| `App.jsx` | Main router, WebSocket setup, sensor state management |
-| `Dashboard.jsx` | Real-time sensor display, gauges, controls |
-| `SettingsWindow.jsx` | Threshold configuration |
-| `HistoricalWindow.jsx` | Historical data charts |
-| `Header.jsx` | Navigation, device selector, alerts |
-| `SidePanel.jsx` | Navigation sidebar |
+| Component              | Purpose                                               |
+| ---------------------- | ----------------------------------------------------- |
+| `App.jsx`              | Main router, WebSocket setup, sensor state management |
+| `Dashboard.jsx`        | Real-time sensor display, gauges, controls            |
+| `SettingsWindow.jsx`   | Threshold configuration                               |
+| `HistoricalWindow.jsx` | Historical data charts                                |
+| `Header.jsx`           | Navigation, device selector, alerts                   |
+| `SidePanel.jsx`        | Navigation sidebar                                    |
 
 ---
 
@@ -205,7 +207,7 @@ ReactDOM.createRoot(...)
                  └── App
 
 // 2. AutoLogin performs auto-login
-login(email, secretKey) 
+login(email, secretKey)
   └── POST /get-token (uses fetch with credentials: 'include')
        └── HttpOnly cookies set by server
             └── setAuth({ userId })
@@ -242,17 +244,22 @@ src/
 │
 ├── Components/
 │   ├── Dashboard.jsx     # Real-time monitoring
-│   ├── SettingsWindow.jsx # Threshold settings
+│   ├── SettingsWindow.jsx # Threshold settings, mode switch, machine control
 │   ├── HistoricalWindow.jsx # Historical charts
 │   ├── Header.jsx        # Top navigation
-│   ├── SidePanel.jsx     # Side navigation
+│   ├── SidePanel.jsx     # Side navigation (emergency stop button)
 │   └── ...other UI components
 │
 └── services/
     ├── api.js            # Axios instance + interceptors (token refresh)
     ├── authService.js    # Login function only
-    ├── deviceService.js  # All device/sensor APIs
+    ├── deviceService.js  # All device/sensor APIs + state updates
+    ├── productionService.js # Unit counting, production log
     └── webSocketClient.js # STOMP WebSocket client
+                             # sendEmergencyStopCommand(bool)
+                             # sendControlModeCommand(string)
+                             # sendVentilationCommand(state, mode)
+                             # sendMachineControlCommand(command)
 ```
 
 ---
@@ -260,6 +267,7 @@ src/
 ## ⚙️ Configuration
 
 ### Vite Proxy (vite.config.js)
+
 ```javascript
 proxy: {
   "/api": {
@@ -271,8 +279,9 @@ proxy: {
 ```
 
 ### WebSocket URL (webSocketClient.js)
+
 ```javascript
-const wsUrl = 'wss://api.protonestconnect.co/ws';
+const wsUrl = "wss://api.protonestconnect.co/ws";
 // No token in URL - uses HttpOnly cookies
 ```
 
@@ -284,8 +293,10 @@ const wsUrl = 'wss://api.protonestconnect.co/ws';
 2. **Real-time Monitoring**: Live sensor data via WebSocket
 3. **Threshold Alerts**: Visual alerts when values exceed limits
 4. **Machine Control**: Start/Stop machines, ventilation control
-5. **Historical Data**: View past sensor readings with charts
-6. **Token Auto-Refresh**: Seamless session management
+5. **Emergency Stop / Resume**: Publishes to `fmc/emergencyStop` topic (`true`/`false`); no page reload on resume — dashboard data refreshes in-place
+6. **Control Mode Switch**: AUTO ⇤ MANUAL publishes to `fmc/controlMode` topic
+7. **Historical Data**: View past sensor readings with charts
+8. **Token Auto-Refresh**: Seamless session management
 
 ---
 
@@ -304,4 +315,19 @@ npm run build
 
 ---
 
-*Last Updated: February 2026*
+### Control Commands (WebSocket + HTTP)
+
+```
+WebSocketClient publishes to STOMP destination:
+  /app/device/<deviceId>/state/fmc/<topic>
+
+Active state topics:
+  fmc/machineControl  → {"machineControl": "run"|"stop"|"idle"}
+  fmc/ventilation     → {"ventilation": "on"|"off", "mode": "manual"|"auto"}
+  fmc/emergencyStop   → {"emergencyStop": true|false, "reason": "..."}
+  fmc/controlMode     → {"controlMode": "manual"|"auto"}
+```
+
+---
+
+_Last Updated: February 18, 2026_

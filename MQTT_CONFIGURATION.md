@@ -84,13 +84,14 @@ Subscribe to real-time sensor streams:
 | ---------- | ------------- | --------- | --------------------- |
 | Stream     | `temperature` | Float     | Temperature in °C     |
 | Stream     | `humidity`    | Float     | Humidity percentage   |
-| Stream     | `co2`         | Float     | CO2 level in ppm      |
+| Stream     | `co2`         | Float     | CO2 level %           |
 | Stream     | `vibration`   | Float     | Vibration in mm/s     |
 | Stream     | `noise`       | Float     | Noise level in dB     |
-| Stream     | `pressure`    | Float     | Pressure in Pa        |
-| Stream     | `aqi`         | Integer   | Air Quality Index     |
-| Stream     | `units`       | Integer   | Production unit count |
+| Stream     | `pressure`    | Float     | Pressure in **bar**   |
 | Stream     | `product`     | JSON      | Product tracking data |
+
+> ⚠️ **AQI** is calculated client-side — do **not** publish `fmc/aqi`.  
+> ⚠️ **Units** are counted from `fmc/product` records — do **not** publish `fmc/units`.
 
 **STOMP Subscription Example:**
 
@@ -108,11 +109,12 @@ fmc/temperature
 
 Publish/subscribe to machine state:
 
-| Topic Type | Control          | Data Type      | Description                    |
-| ---------- | ---------------- | -------------- | ------------------------------ |
-| State      | `ventilation`    | Boolean/String | Ventilation control (on/off)   |
-| State      | `machineControl` | String         | Machine status (RUN/STOP/IDLE) |
-| State      | `emergencyStop`  | JSON           | Emergency stop with reason     |
+| Topic Type | Control          | Data Type      | Description                          |
+| ---------- | ---------------- | -------------- | ------------------------------------ |
+| State      | `ventilation`    | Boolean/String | Ventilation control (on/off)         |
+| State      | `machineControl` | String         | Machine status (RUN/STOP/IDLE)       |
+| State      | `emergencyStop`  | Boolean        | Emergency stop/resume (`true/false`) |
+| State      | `controlMode`    | String         | Control mode (`manual`/`auto`)       |
 
 **STOMP Subscription Example:**
 
@@ -189,19 +191,16 @@ co2Score = max(0, 100 - (co2 × 2))
 ## WebSocket Connection Flow
 
 1. **Authentication (main.jsx)**
-
    - App starts → Calls POST /get-token with credentials
    - If success → Cookies set, App component renders
    - If failure → Error screen shown
 
 2. **WebSocket Connection (App.jsx)**
-
    - App renders → Connects to `wss://api.protonestconnect.co/ws`
    - Cookies sent automatically (HttpOnly)
    - Waits for connection confirmation
 
 3. **Topic Subscription**
-
    - Once connected → Subscribes to device topics:
      - `/topic/stream/<deviceId>` for sensor data
      - `/topic/state/<deviceId>` for control state
@@ -341,5 +340,5 @@ For issues with:
 
 ---
 
-**Last Updated**: February 10, 2026
-**Version**: 4.0.0 (Cookie Auth, Simplified Topics)
+**Last Updated**: February 18, 2026
+**Version**: 4.2.0 (Emergency Stop + Control Mode topics, bar pressure)

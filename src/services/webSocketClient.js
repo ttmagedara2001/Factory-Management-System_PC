@@ -305,6 +305,26 @@ class WebSocketClient {
       machineControl: command.toLowerCase(),
     });
   }
+
+  /**
+   * Publish an emergency stop state to fmc/emergencyStop.
+   * @param {boolean} stopped — true to stop, false to resume.
+   */
+  sendEmergencyStopCommand(stopped) {
+    return this.sendCommand("emergencyStop", {
+      emergencyStop: stopped,
+    });
+  }
+
+  /**
+   * Publish a control mode change to fmc/controlMode.
+   * @param {string} mode — "manual" or "auto".
+   */
+  sendControlModeCommand(mode) {
+    return this.sendCommand("controlMode", {
+      controlMode: mode.toLowerCase(),
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

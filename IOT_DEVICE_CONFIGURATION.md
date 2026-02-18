@@ -198,7 +198,7 @@ All sensor data must be published in **JSON format**. The message will have **Qo
 
 #### 3.2 Air Quality Sensors
 
-**Air Quality Index (AQI)** - *Calculated Client-Side*
+**Air Quality Index (AQI)** - _Calculated Client-Side_
 
 Note: AQI is NOT sent by the device. It is automatically calculated by the dashboard based on temperature, humidity, and CO2 values:
 
@@ -208,22 +208,12 @@ AQI = (TempScore × 0.30) + (HumidityScore × 0.30) + (CO2Score × 0.40)
 ```
 
 Where:
+
 - TempScore: 100 points in 20-25°C range, -5 pts per °C deviation
-- HumidityScore: 100 points in 40-60% range, -2 pts per % deviation  
+- HumidityScore: 100 points in 40-60% range, -2 pts per % deviation
 - CO2Score: 100 points if <45%, gradual decrease above
 
 Result: 0-100 scale (≥75 Good, 50-74 Fair, <50 Poor)
-
-**PM2.5 (Particulate Matter)**
-
-- Topic: `protonest/<devicename>/stream/fmc/pm25`
-- Unit: µg/m³ (micrograms per cubic meter)
-- Normal Range: 0 - 35 µg/m³
-- Payload Format:
-  ```json
-  { "pm25": "12.5" }
-  ```
-- Example: `protonest/demo/stream/fmc/pm25` → `{"pm25":"18.0"}`
 
 **CO2 (Carbon Dioxide)**
 
@@ -373,7 +363,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     StaticJsonDocument<200> doc;
     deserializeJson(doc, payload, length);
     const char* status = doc["status"];
-    
+
     if (strcmp(status, "RUN") == 0) {
       digitalWrite(MACHINE_RELAY_PIN, HIGH);
       Serial.println("✅ Machine STARTED");
@@ -397,12 +387,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
    - Load your certificates
 
 2. **Subscribe to state topics**:
+
    ```
    Topic: protonest/devicetestuc/state/fmc/#
    QoS: 1
    ```
 
 3. **Simulate RUN command (from dashboard)**:
+
    ```
    Topic: protonest/devicetestuc/state/fmc/machineControl
    QoS: 1
@@ -411,6 +403,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
    ```
 
 4. **Simulate STOP command**:
+
    ```
    Topic: protonest/devicetestuc/state/fmc/machineControl
    QoS: 1
@@ -440,11 +433,11 @@ The dashboard sends ventilation commands via HTTP API (`POST /update-state-detai
 
 **Possible values**:
 
-| Field | Values | Description |
-|-------|--------|-------------|
+| Field         | Values                    | Description       |
+| ------------- | ------------------------- | ----------------- |
 | `ventilation` | `"on"`, `"off"`, `"auto"` | Ventilation state |
-| `mode` | `"manual"`, `"auto"` | Control mode |
-| `timestamp` | ISO-8601 string | Command timestamp |
+| `mode`        | `"manual"`, `"auto"`      | Control mode      |
+| `timestamp`   | ISO-8601 string           | Command timestamp |
 
 **Example Commands**:
 
@@ -476,17 +469,54 @@ void handleVentilation(const char* ventilation, const char* mode) {
 }
 ```
 
-#### 4.3 Emergency Stop
+#### 4.3 Emergency Stop 🚨
 
 **Topic**: `protonest/<devicename>/state/fmc/emergencyStop`
 
-**Payload Format**:
+**Direction**: Dashboard → Firmware (Firmware subscribes)
+
+**Triggered by**: User clicking Emergency Stop or Resume on the dashboard.
 
 ```json
-{ "emergencyStop": true, "reason": "Safety limit exceeded" }
+// Sent when emergency stop is activated
+{"emergencyStop": true,  "reason": "EMERGENCY STOP", "timestamp": "2026-02-18T08:00:00Z"}
+
+// Sent when factory is resumed
+{"emergencyStop": false, "reason": "RESUMED",        "timestamp": "2026-02-18T08:05:00Z"}
 ```
 
-**Note**: Emergency stop events change factory status to "CRITICAL" and require manual acknowledgment.
+**Firmware handling example**:
+
+```c
+if (strstr(topic, "emergencyStop")) {
+  bool stopped = doc["emergencyStop"];
+  if (stopped) stopAllActuators();
+  else         resumeNormalOperation();
+}
+```
+
+#### 4.4 Control Mode
+
+**Topic**: `protonest/<devicename>/state/fmc/controlMode`
+
+**Direction**: Dashboard → Firmware (Firmware subscribes)
+
+**Triggered by**: User switching AUTO/MANUAL mode in Settings.
+
+```json
+{"controlMode": "manual", "timestamp": "2026-02-18T08:00:00Z"}
+{"controlMode": "auto",   "timestamp": "2026-02-18T08:00:00Z"}
+```
+
+**Firmware handling example**:
+
+```c
+if (strstr(topic, "controlMode")) {
+  const char* mode = doc["controlMode"];
+  if (strcmp(mode, "auto") == 0) enableAutoControl();
+  else                           enableManualControl();
+}
+```
 
 ---
 
@@ -508,14 +538,12 @@ void handleVentilation(const char* ventilation, const char* mode) {
 4. Choose Authentication Method:
 
    **Option A: Certificate Authentication (Recommended)**
-
    - **Certificate**: Self signed
    - **CA File**: Browse and select `rootCA.pem`
    - **Client Certificate File**: Browse and select `client-cert.pem`
    - **Client Key File**: Browse and select `client-key.pem`
 
    **Option B: Username/Password Authentication**
-
    - **Username**: Your ProtoNest username
    - **Password**: Your ProtoNest secret key
    - Leave certificate fields empty (will use system CA)
@@ -540,6 +568,7 @@ protonest/demo/state/fmc/#
 protonest/demo/state/fmc/machineControl
 protonest/demo/state/fmc/ventilation
 protonest/demo/state/fmc/emergencyStop
+protonest/demo/state/fmc/controlMode
 ```
 
 **QoS**: 1 (At least once delivery)
@@ -567,7 +596,7 @@ Create timed publish scripts for each sensor:
 - Topic: `protonest/demo/stream/fmc/pressure`
 - QoS: 1
 - Retain: true
-- Payload: `{"pressure":"101325"}`
+- Payload: `{"pressure":"1.05"}` **(value in bar)**
 
 **Humidity Data (publish every 15 seconds)**
 
@@ -583,33 +612,17 @@ Create timed publish scripts for each sensor:
 - Retain: true
 - Payload: `{"noise":"65.3"}`
 
-**Air Quality Index (publish every 30 seconds)**
+**Note**: Do **not** publish `fmc/aqi` — AQI is calculated client-side by the dashboard.
 
-- Topic: `protonest/demo/stream/fmc/aqi`
-- QoS: 1
-- Retain: true
-- Payload: `{"aqi":"42"}`
-
-**PM2.5 (publish every 30 seconds)**
-
-- Topic: `protonest/demo/stream/fmc/pm25`
-- QoS: 1
-- Retain: true
-- Payload: `{"pm25":"12.5"}`
+**Note**: Do **not** publish `fmc/units` — units are counted from `fmc/product` records.
 
 **CO2 (publish every 30 seconds)**
 
 - Topic: `protonest/demo/stream/fmc/co2`
 - QoS: 1
 - Retain: true
-- Payload: `{"co2":"450"}`
+- Payload: `{"co2":"45"}`
 
-**Production Unit Count (publish periodically)**
-
-- Topic: `protonest/demo/stream/fmc/units`
-- QoS: 1
-- Retain: true
-- Payload: `{"units":"150"}`
 
 **Product Tracking (publish on each product scan)**
 
@@ -631,8 +644,8 @@ Publish sensor data within normal ranges:
 // Vibration
 {"vibration": "3.2"}
 
-// Pressure (in Pa)
-{"pressure": "101325"}
+// Normal Pressure
+{"pressure": "1.02"}
 
 // Temperature
 {"temperature": "23.5"}
@@ -645,9 +658,6 @@ Publish sensor data within normal ranges:
 
 // AQI
 {"aqi": "35"}
-
-// PM2.5
-{"pm25": "15.0"}
 
 // CO2
 {"co2": "400"}
@@ -664,8 +674,8 @@ Publish sensor data exceeding thresholds to trigger alerts:
 // High Vibration (Critical)
 {"vibration": "12.5"}
 
-// High Pressure (Critical > 110000 Pa)
-{"pressure": "115000"}
+// High Pressure (Critical > 1.10 bar)
+{"pressure": "1.25"}
 
 // High Temperature (Critical > 40°C)
 {"temperature": "42.0"}
@@ -678,9 +688,6 @@ Publish sensor data exceeding thresholds to trigger alerts:
 
 // Poor Air Quality (Warning > 100, Critical > 150)
 {"aqi": "155"}
-
-// High PM2.5 (Warning > 25, Critical > 35 µg/m³)
-{"pm25": "40.0"}
 
 // High CO2 (Warning > 800, Critical > 1000 ppm)
 {"co2": "1200"}
@@ -727,18 +734,23 @@ When you receive a command on `protonest/demo/state/fmc/machineControl`:
 { "status": "STOP" }
 ```
 
-### Scenario 5: Emergency Stop
+### Scenario 5: Emergency Stop & Resume
 
-**Topic**: `protonest/demo/state/fmc/emergencyStop`
+**Emergency Stop** (Dashboard → Device on button click):
 
-```json
-{
-  "emergencyStop": true,
-  "reason": "Safety limit exceeded"
-}
+```
+Topic: protonest/demo/state/fmc/emergencyStop
+Payload: {"emergencyStop": true, "reason": "EMERGENCY STOP"}
 ```
 
-**Note**: Emergency stop events will change the factory status to "CRITICAL" in the dashboard.
+**Resume** (Dashboard → Device on resume click):
+
+```
+Topic: protonest/demo/state/fmc/emergencyStop
+Payload: {"emergencyStop": false, "reason": "RESUMED"}
+```
+
+**Note**: Both stop and resume use the **same topic** `fmc/emergencyStop` with `emergencyStop: true/false`.
 
 ---
 
@@ -865,27 +877,27 @@ client.on("connect", () => {
     client.publish(
       `protonest/${DEVICE_NAME}/stream/vibration`,
       JSON.stringify({ vibration }),
-      { qos: 1, retain: true }
+      { qos: 1, retain: true },
     );
     client.publish(
       `protonest/${DEVICE_NAME}/stream/temp`,
       JSON.stringify({ temperature }),
-      { qos: 1, retain: true }
+      { qos: 1, retain: true },
     );
     client.publish(
       `protonest/${DEVICE_NAME}/stream/pressure`,
       JSON.stringify({ pressure }),
-      { qos: 1, retain: true }
+      { qos: 1, retain: true },
     );
     client.publish(
       `protonest/${DEVICE_NAME}/stream/humidity`,
       JSON.stringify({ humidity }),
-      { qos: 1, retain: true }
+      { qos: 1, retain: true },
     );
     client.publish(
       `protonest/${DEVICE_NAME}/stream/noise`,
       JSON.stringify({ noise }),
-      { qos: 1, retain: true }
+      { qos: 1, retain: true },
     );
 
     console.log("Published sensor data");
@@ -900,17 +912,17 @@ client.on("connect", () => {
     client.publish(
       `protonest/${DEVICE_NAME}/stream/aqi`,
       JSON.stringify({ aqi: aqi.toString() }),
-      { qos: 1, retain: true }
+      { qos: 1, retain: true },
     );
     client.publish(
       `protonest/${DEVICE_NAME}/stream/pm25`,
       JSON.stringify({ pm25 }),
-      { qos: 1, retain: true }
+      { qos: 1, retain: true },
     );
     client.publish(
       `protonest/${DEVICE_NAME}/stream/co2`,
       JSON.stringify({ co2: co2.toString() }),
-      { qos: 1, retain: true }
+      { qos: 1, retain: true },
     );
 
     console.log("Published air quality data");
@@ -931,7 +943,7 @@ client.on("message", (topic, message) => {
       JSON.stringify({
         machine_control: { status: command.status },
       }),
-      { qos: 1, retain: true }
+      { qos: 1, retain: true },
     );
   }
 
@@ -946,7 +958,7 @@ client.on("message", (topic, message) => {
       JSON.stringify({
         ventilation_mode: { mode: command.mode },
       }),
-      { qos: 1, retain: true }
+      { qos: 1, retain: true },
     );
   }
 });
@@ -1011,9 +1023,10 @@ All state:  protonest/<devicename>/state/#
 
 ### State Control Names
 
-- `machine_control` - Machine control (RUN/STOP/IDLE)
-- `ventilation_mode` - Ventilation mode (auto/manual)
-- `motor` - Motor control (ON/OFF) - Generic example
+- `machineControl` — Machine control (`RUN`/`STOP`/`IDLE`)
+- `ventilation` — Ventilation (`on`/`off`, `manual`/`auto`)
+- `emergencyStop` — Emergency stop/resume (`emergencyStop: true/false`)
+- `controlMode` — Control mode (`manual`/`auto`)
 
 ### Payload Format
 
@@ -1070,8 +1083,8 @@ Example: `{"state":"ON"}`, `{"status":"RUN"}`
 
 ---
 
-**Last Updated**: January 22, 2026  
-**Version**: 4.0  
-**Compatible with**: Factory Management System v3.0 (Cookie-based Auth)  
+**Last Updated**: February 18, 2026  
+**Version**: 4.2  
+**Compatible with**: Factory Management System v4.2  
 **MQTT Broker**: mqtt.protonest.co (Port 8883, SSL/TLS)  
 **WebSocket**: wss://api.protonestconnect.co/ws

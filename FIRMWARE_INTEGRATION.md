@@ -49,14 +49,14 @@ This document provides complete integration details for embedded firmware develo
 
 ### Connection Parameters
 
-| Parameter | Value |
-|-----------|-------|
-| **Protocol** | MQTT over SSL/TLS |
-| **Host** | `mqtt.protonest.co` |
-| **Port** | 8883 |
-| **SSL/TLS** | Required |
-| **Keep Alive** | 60 seconds |
-| **Clean Session** | true |
+| Parameter         | Value               |
+| ----------------- | ------------------- |
+| **Protocol**      | MQTT over SSL/TLS   |
+| **Host**          | `mqtt.protonest.co` |
+| **Port**          | 8883                |
+| **SSL/TLS**       | Required            |
+| **Keep Alive**    | 60 seconds          |
+| **Clean Session** | true                |
 
 ### Authentication Options
 
@@ -78,6 +78,7 @@ client.setServer(mqtt_server, mqtt_port);
 ```
 
 **Certificate Files Required**:
+
 - `rootCA.pem` - Root CA Certificate
 - `client-cert.pem` - Client Certificate
 - `client-key.pem` - Client Private Key
@@ -115,13 +116,13 @@ const char* clientId = "device9988";      // Case-sensitive
 protonest/<deviceId>/<category>/fmc/<topic_name>
 ```
 
-| Component | Description | Example |
-|-----------|-------------|---------|
-| `protonest` | Platform namespace (fixed) | `protonest` |
-| `<deviceId>` | Your device identifier | `devicetestuc` |
-| `<category>` | `stream` (sensor data) or `state` (commands) | `stream` |
-| `fmc` | Factory Management Controller namespace | `fmc` |
-| `<topic_name>` | Specific sensor or control name | `temperature` |
+| Component      | Description                                  | Example        |
+| -------------- | -------------------------------------------- | -------------- |
+| `protonest`    | Platform namespace (fixed)                   | `protonest`    |
+| `<deviceId>`   | Your device identifier                       | `devicetestuc` |
+| `<category>`   | `stream` (sensor data) or `state` (commands) | `stream`       |
+| `fmc`          | Factory Management Controller namespace      | `fmc`          |
+| `<topic_name>` | Specific sensor or control name              | `temperature`  |
 
 ### Examples
 
@@ -146,86 +147,86 @@ Firmware publishes sensor data to stream topics. The dashboard receives this dat
 
 #### Vibration Sensor
 
-| Property | Value |
-|----------|-------|
-| **Topic** | `protonest/<deviceId>/stream/fmc/vibration` |
-| **Unit** | mm/s (millimeters per second) |
-| **Normal Range** | 0 - 7 mm/s |
-| **Warning** | > 7 mm/s |
-| **Critical** | > 10 mm/s |
+| Property         | Value                                       |
+| ---------------- | ------------------------------------------- |
+| **Topic**        | `protonest/<deviceId>/stream/fmc/vibration` |
+| **Unit**         | mm/s (millimeters per second)               |
+| **Normal Range** | 0 - 7 mm/s                                  |
+| **Warning**      | > 7 mm/s                                    |
+| **Critical**     | > 10 mm/s                                   |
 
 ```json
-{"vibration": "3.2"}
+{ "vibration": "3.2" }
 ```
 
 #### Pressure Sensor
 
-| Property | Value |
-|----------|-------|
-| **Topic** | `protonest/<deviceId>/stream/fmc/pressure` |
-| **Unit** | bar |
-| **Normal Range** | 1 - 6 bar |
-| **Warning** | > 6 bar or < 1 bar |
-| **Critical** | > 8 bar or < 0.5 bar |
+| Property         | Value                                      |
+| ---------------- | ------------------------------------------ |
+| **Topic**        | `protonest/<deviceId>/stream/fmc/pressure` |
+| **Unit**         | bar                                        |
+| **Normal Range** | 1 - 6 bar                                  |
+| **Warning**      | > 6 bar or < 1 bar                         |
+| **Critical**     | > 8 bar or < 0.5 bar                       |
 
 ```json
-{"pressure": "4.5"}
+{ "pressure": "4.5" }
 ```
 
 #### Temperature Sensor
 
-| Property | Value |
-|----------|-------|
-| **Topic** | `protonest/<deviceId>/stream/fmc/temperature` |
-| **Unit** | °C (Celsius) |
-| **Optimal** | 20 - 25°C |
-| **Warning** | > 35°C or < 15°C |
+| Property    | Value                                         |
+| ----------- | --------------------------------------------- |
+| **Topic**   | `protonest/<deviceId>/stream/fmc/temperature` |
+| **Unit**    | °C (Celsius)                                  |
+| **Optimal** | 20 - 25°C                                     |
+| **Warning** | > 35°C or < 15°C                              |
 
 ```json
-{"temperature": "22.5"}
+{ "temperature": "22.5" }
 ```
 
 #### Humidity Sensor
 
-| Property | Value |
-|----------|-------|
-| **Topic** | `protonest/<deviceId>/stream/fmc/humidity` |
-| **Unit** | % (percentage) |
-| **Optimal** | 40 - 60% |
-| **Warning** | > 70% or < 30% |
+| Property    | Value                                      |
+| ----------- | ------------------------------------------ |
+| **Topic**   | `protonest/<deviceId>/stream/fmc/humidity` |
+| **Unit**    | % (percentage)                             |
+| **Optimal** | 40 - 60%                                   |
+| **Warning** | > 70% or < 30%                             |
 
 ```json
-{"humidity": "55.0"}
+{ "humidity": "55.0" }
 ```
 
 #### Noise Level Sensor
 
-| Property | Value |
-|----------|-------|
-| **Topic** | `protonest/<deviceId>/stream/fmc/noise` |
-| **Unit** | dB (decibels) |
-| **Normal** | < 75 dB |
-| **Warning** | 75 - 85 dB |
-| **Critical** | > 85 dB |
+| Property     | Value                                   |
+| ------------ | --------------------------------------- |
+| **Topic**    | `protonest/<deviceId>/stream/fmc/noise` |
+| **Unit**     | dB (decibels)                           |
+| **Normal**   | < 75 dB                                 |
+| **Warning**  | 75 - 85 dB                              |
+| **Critical** | > 85 dB                                 |
 
 ```json
-{"noise": "65.3"}
+{ "noise": "65.3" }
 ```
 
 ### 4.2 Air Quality Sensors
 
 #### CO2 Sensor
 
-| Property | Value |
-|----------|-------|
-| **Topic** | `protonest/<deviceId>/stream/fmc/co2` |
-| **Unit** | % (percentage of safe limit) |
-| **Optimal** | < 45% |
-| **Warning** | 45 - 70% |
-| **Critical** | > 70% |
+| Property     | Value                                 |
+| ------------ | ------------------------------------- |
+| **Topic**    | `protonest/<deviceId>/stream/fmc/co2` |
+| **Unit**     | % (percentage of safe limit)          |
+| **Optimal**  | < 45%                                 |
+| **Warning**  | 45 - 70%                              |
+| **Critical** | > 70%                                 |
 
 ```json
-{"co2": "35"}
+{ "co2": "35" }
 ```
 
 **Note**: The dashboard calculates AQI (Air Quality Index) automatically from temperature, humidity, and CO2:
@@ -238,11 +239,11 @@ AQI = (TempScore × 0.30) + (HumidityScore × 0.30) + (CO2Score × 0.40)
 
 #### Product Tracking (Primary Method)
 
-| Property | Value |
-|----------|-------|
-| **Topic** | `protonest/<deviceId>/stream/fmc/product` |
-| **Retain** | false (event-based) |
-| **Usage** | Individual product scans/tracking |
+| Property   | Value                                     |
+| ---------- | ----------------------------------------- |
+| **Topic**  | `protonest/<deviceId>/stream/fmc/product` |
+| **Retain** | false (event-based)                       |
+| **Usage**  | Individual product scans/tracking         |
 
 ```json
 {
@@ -377,10 +378,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     StaticJsonDocument<200> doc;
     deserializeJson(doc, payload, length);
     const char* status = doc["status"];
-    
+
     Serial.print("Machine control command received: ");
     Serial.println(status);
-    
+
     if (strcmp(status, "RUN") == 0) {
       startMachine();
       Serial.println("✅ Machine STARTED");
@@ -391,7 +392,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       setIdle();
       Serial.println("⏸️ Machine set to IDLE");
     }
-    
+
     // Optional: Acknowledge by publishing current state back
     publishMachineState(status);
   }
@@ -417,6 +418,7 @@ void setIdle() {
 #### Testing machineControl with MQTTX
 
 **Step 1: Subscribe to state topics**
+
 ```
 Topic: protonest/devicetestuc/state/fmc/#
 QoS: 1
@@ -436,17 +438,18 @@ Payload: {"status": "RUN"}
 **Step 3: Verify in MQTTX**
 
 You should see the message in your subscription. Your firmware should:
+
 1. Receive the message
 2. Parse the JSON payload
 3. Execute `startMachine()` or equivalent
 
 **Test Scenarios:**
 
-| Test | Publish Payload | Expected Firmware Action |
-|------|-----------------|--------------------------|
-| Start Machine | `{"status": "RUN"}` | Turn on machine relay, start production |
-| Stop Machine | `{"status": "STOP"}` | Turn off machine relay, stop production |
-| Set Idle | `{"status": "IDLE"}` | Low-power mode, ready for quick restart |
+| Test          | Publish Payload      | Expected Firmware Action                |
+| ------------- | -------------------- | --------------------------------------- |
+| Start Machine | `{"status": "RUN"}`  | Turn on machine relay, start production |
+| Stop Machine  | `{"status": "STOP"}` | Turn off machine relay, stop production |
+| Set Idle      | `{"status": "IDLE"}` | Low-power mode, ready for quick restart |
 
 ### 5.2 Ventilation Control
 
@@ -482,16 +485,16 @@ You should see the message in your subscription. Your firmware should:
 void handleVentilationCommand(byte* payload, unsigned int length) {
   StaticJsonDocument<256> doc;
   deserializeJson(doc, payload, length);
-  
+
   const char* ventilation = doc["ventilation"];
   const char* mode = doc["mode"];
-  
+
   if (strcmp(mode, "auto") == 0) {
     // Enable automatic ventilation control based on sensors
     setVentilationAuto(true);
   } else if (strcmp(mode, "manual") == 0) {
     setVentilationAuto(false);
-    
+
     if (strcmp(ventilation, "on") == 0) {
       turnVentilationOn();
     } else if (strcmp(ventilation, "off") == 0) {
@@ -501,16 +504,74 @@ void handleVentilationCommand(byte* payload, unsigned int length) {
 }
 ```
 
-### 5.3 Emergency Stop
+### 5.3 Emergency Stop 🚨
 
 **Topic**: `protonest/<deviceId>/state/fmc/emergencyStop`
 
-**Direction**: Firmware → Dashboard (Publish when emergency occurs)
+**Direction**: Dashboard → Firmware (Firmware subscribes and receives commands)
+
+**Triggered by**: User clicking Emergency Stop or Resume in the dashboard.
 
 ```json
+// Stop — sent when emergency stop is activated
 {
   "emergencyStop": true,
-  "reason": "Safety limit exceeded - Temperature critical"
+  "reason": "EMERGENCY STOP",
+  "timestamp": "2026-02-18T08:00:00.000Z"
+}
+
+// Resume — sent when factory is manually resumed
+{
+  "emergencyStop": false,
+  "reason": "RESUMED",
+  "timestamp": "2026-02-18T08:05:00.000Z"
+}
+```
+
+**Firmware Implementation**:
+
+```c
+if (strstr(topic, "emergencyStop")) {
+  StaticJsonDocument<128> doc;
+  deserializeJson(doc, payload, length);
+  bool stopped = doc["emergencyStop"];
+  if (stopped) {
+    stopAllActuators(); // halt machine, ventilation, etc.
+    Serial.println("🚨 EMERGENCY STOP received");
+  } else {
+    resumeNormalOperation();
+    Serial.println("✅ Resume received — returning to normal");
+  }
+}
+```
+
+### 5.4 Control Mode
+
+**Topic**: `protonest/<deviceId>/state/fmc/controlMode`
+
+**Direction**: Dashboard → Firmware (Firmware subscribes)
+
+**Triggered by**: User switching between AUTO and MANUAL mode in Settings.
+
+```json
+{"controlMode": "manual", "timestamp": "2026-02-18T08:00:00.000Z"} // Manual mode
+{"controlMode": "auto",   "timestamp": "2026-02-18T08:00:00.000Z"} // Auto mode
+```
+
+**Firmware Implementation**:
+
+```c
+if (strstr(topic, "controlMode")) {
+  StaticJsonDocument<128> doc;
+  deserializeJson(doc, payload, length);
+  const char* mode = doc["controlMode"];
+  if (strcmp(mode, "auto") == 0) {
+    enableAutoControl();   // system manages actuators
+    Serial.println("🤖 AUTO mode enabled");
+  } else {
+    enableManualControl(); // user commands actuators
+    Serial.println("🔧 MANUAL mode enabled");
+  }
 }
 ```
 
@@ -520,17 +581,17 @@ void handleVentilationCommand(byte* payload, unsigned int length) {
 
 ### Publishing Stream Data
 
-| Property | Value | Notes |
-|----------|-------|-------|
-| **QoS** | 1 | At least once delivery |
-| **Retain** | true | Last value always available |
-| **Format** | JSON | UTF-8 encoded |
+| Property   | Value | Notes                       |
+| ---------- | ----- | --------------------------- |
+| **QoS**    | 1     | At least once delivery      |
+| **Retain** | true  | Last value always available |
+| **Format** | JSON  | UTF-8 encoded               |
 
 ### Subscribing to State Commands
 
-| Property | Value | Notes |
-|----------|-------|-------|
-| **QoS** | 1 | At least once delivery |
+| Property     | Value                              | Notes                     |
+| ------------ | ---------------------------------- | ------------------------- |
+| **QoS**      | 1                                  | At least once delivery    |
 | **Wildcard** | `protonest/<deviceId>/state/fmc/#` | Subscribe to all commands |
 
 ---
@@ -545,24 +606,24 @@ All numeric values **MUST** be sent as **strings** in JSON:
 // ✓ Correct
 {"temperature": "25.5"}
 {"vibration": "3.2"}
-{"pressure": "4.5"}
+{"pressure": "1.05"}   // bar
 
 // ✗ Incorrect (numbers without quotes)
 {"temperature": 25.5}
 {"vibration": 3.2}
-{"pressure": 4.5}
+{"pressure": 1.05}
 ```
 
 ### Precision Guidelines
 
-| Sensor Type | Decimal Places | Example |
-|-------------|----------------|---------|
-| Temperature | 1 | `"22.5"` |
-| Humidity | 1 | `"55.0"` |
-| Vibration | 1 | `"3.2"` |
-| Pressure | 1 | `"4.5"` |
-| Noise | 1 | `"65.3"` |
-| CO2 | 0 | `"45"` |
+| Sensor Type | Decimal Places | Example        |
+| ----------- | -------------- | -------------- |
+| Temperature | 1              | `"22.5"`       |
+| Humidity    | 1              | `"55.0"`       |
+| Vibration   | 1              | `"3.2"`        |
+| Pressure    | 2              | `"1.05"` (bar) |
+| Noise       | 1              | `"65.3"`       |
+| CO2         | 0              | `"45"`         |
 
 ---
 
@@ -610,11 +671,11 @@ const unsigned long sensorInterval = 5000; // 5 seconds
 
 void setup() {
   Serial.begin(115200);
-  
+
   // Setup pins
   pinMode(MACHINE_RELAY_PIN, OUTPUT);
   pinMode(VENT_RELAY_PIN, OUTPUT);
-  
+
   // Setup WiFi
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -622,17 +683,17 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("\nWiFi connected");
-  
+
   // Setup SSL certificates
   espClient.setCACert(rootCA);
   espClient.setCertificate(clientCert);
   espClient.setPrivateKey(clientKey);
-  
+
   // Setup MQTT
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(mqttCallback);
   client.setBufferSize(512);
-  
+
   // Connect and subscribe
   reconnect();
 }
@@ -640,10 +701,10 @@ void setup() {
 void reconnect() {
   while (!client.connected()) {
     Serial.println("Connecting to MQTT...");
-    
+
     if (client.connect(device_id)) {
       Serial.println("MQTT Connected!");
-      
+
       // Subscribe to all state commands
       String stateTopic = stateTopicBase + "#";
       client.subscribe(stateTopic.c_str(), 1);
@@ -659,16 +720,16 @@ void reconnect() {
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.print("📨 Message received: ");
   Serial.println(topic);
-  
+
   // Parse JSON
   StaticJsonDocument<256> doc;
   DeserializationError error = deserializeJson(doc, payload, length);
-  
+
   if (error) {
     Serial.println("JSON parse error");
     return;
   }
-  
+
   // Handle machine control
   if (strstr(topic, "machineControl")) {
     const char* status = doc["status"];
@@ -676,7 +737,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     Serial.println(status);
     handleMachineControl(status);
   }
-  
+
   // Handle ventilation
   if (strstr(topic, "ventilation")) {
     const char* ventilation = doc["ventilation"];
@@ -724,60 +785,60 @@ void handleVentilation(const char* ventilation, const char* mode) {
 void publishSensorData() {
   StaticJsonDocument<64> doc;
   char buffer[64];
-  
+
   // Temperature
   float temp = readTemperature();
   doc.clear();
   doc["temperature"] = String(temp, 1);
   serializeJson(doc, buffer);
   client.publish((streamTopicBase + "temperature").c_str(), buffer, true);
-  
+
   // Humidity
   float humidity = readHumidity();
   doc.clear();
   doc["humidity"] = String(humidity, 1);
   serializeJson(doc, buffer);
   client.publish((streamTopicBase + "humidity").c_str(), buffer, true);
-  
+
   // Vibration
   float vibration = readVibration();
   doc.clear();
   doc["vibration"] = String(vibration, 1);
   serializeJson(doc, buffer);
   client.publish((streamTopicBase + "vibration").c_str(), buffer, true);
-  
+
   // CO2
   int co2 = readCO2();
   doc.clear();
   doc["co2"] = String(co2);
   serializeJson(doc, buffer);
   client.publish((streamTopicBase + "co2").c_str(), buffer, true);
-  
+
   // Pressure (in bar)
   float pressure = readPressure();
   doc.clear();
   doc["pressure"] = String(pressure, 1);
   serializeJson(doc, buffer);
   client.publish((streamTopicBase + "pressure").c_str(), buffer, true);
-  
+
   // Noise
   float noise = readNoise();
   doc.clear();
   doc["noise"] = String(noise, 1);
   serializeJson(doc, buffer);
   client.publish((streamTopicBase + "noise").c_str(), buffer, true);
-  
+
   Serial.println("📊 Sensor data published");
 }
 
 void publishProduct(const char* productID, const char* productName) {
   StaticJsonDocument<128> doc;
   char buffer[128];
-  
+
   doc["productID"] = productID;
   doc["productName"] = productName;
   serializeJson(doc, buffer);
-  
+
   // Note: Retain = false for product events
   client.publish((streamTopicBase + "product").c_str(), buffer, false);
   Serial.print("📦 Product published: ");
@@ -789,13 +850,13 @@ void loop() {
     reconnect();
   }
   client.loop();
-  
+
   // Publish sensor data every 5 seconds
   if (millis() - lastSensorPublish >= sensorInterval) {
     lastSensorPublish = millis();
     publishSensorData();
   }
-  
+
   // Check for product detection (e.g., RFID scan)
   if (productDetected()) {
     publishProduct("PROD-" + String(millis()), "Widget A");
@@ -829,12 +890,14 @@ Payload: {"temperature": "25.5"}
 ### Testing machineControl Commands
 
 **Step 1: Subscribe to state topics**
+
 ```
 Topic: protonest/devicetestuc/state/fmc/#
 QoS: 1
 ```
 
 **Step 2: Publish RUN command**
+
 ```
 Topic: protonest/devicetestuc/state/fmc/machineControl
 QoS: 1
@@ -843,6 +906,7 @@ Payload: {"status": "RUN"}
 ```
 
 **Step 3: Publish STOP command**
+
 ```
 Topic: protonest/devicetestuc/state/fmc/machineControl
 QoS: 1
@@ -868,15 +932,15 @@ Publish multiple products, then verify in dashboard that unit count increases.
 
 ## 10. Publishing Frequency Recommendations
 
-| Sensor Type | Recommended Interval | Notes |
-|-------------|---------------------|-------|
-| Vibration | 2-5 seconds | High-frequency for early warning |
-| Temperature | 10-15 seconds | Slow-changing |
-| Humidity | 10-15 seconds | Slow-changing |
-| Pressure | 5-10 seconds | Medium priority |
-| Noise | 5 seconds | Fast changes |
-| CO2 | 30 seconds | Slow-changing |
-| Product | On event | Each time a product is scanned |
+| Sensor Type | Recommended Interval | Notes                            |
+| ----------- | -------------------- | -------------------------------- |
+| Vibration   | 2-5 seconds          | High-frequency for early warning |
+| Temperature | 10-15 seconds        | Slow-changing                    |
+| Humidity    | 10-15 seconds        | Slow-changing                    |
+| Pressure    | 5-10 seconds         | Medium priority                  |
+| Noise       | 5 seconds            | Fast changes                     |
+| CO2         | 30 seconds           | Slow-changing                    |
+| Product     | On event             | Each time a product is scanned   |
 
 ---
 
@@ -912,6 +976,7 @@ Use QoS 1 to ensure at least once delivery. For critical messages (emergency sto
 ## 12. Quick Reference Card
 
 ### Broker Connection
+
 ```
 Host: mqtt.protonest.co
 Port: 8883
@@ -919,23 +984,30 @@ SSL: Required
 ```
 
 ### Stream Topics (Publish)
+
 ```
-protonest/<deviceId>/stream/fmc/temperature   {"temperature": "25.5"}
-protonest/<deviceId>/stream/fmc/humidity      {"humidity": "55.0"}
-protonest/<deviceId>/stream/fmc/vibration     {"vibration": "3.2"}
-protonest/<deviceId>/stream/fmc/pressure      {"pressure": "4.5"}
-protonest/<deviceId>/stream/fmc/noise         {"noise": "65.3"}
-protonest/<deviceId>/stream/fmc/co2           {"co2": "35"}
+protonest/<deviceId>/stream/fmc/temperature   {"temperature": "25.5"}   (°C)
+protonest/<deviceId>/stream/fmc/humidity      {"humidity": "55.0"}      (%)
+protonest/<deviceId>/stream/fmc/vibration     {"vibration": "3.2"}      (mm/s)
+protonest/<deviceId>/stream/fmc/pressure      {"pressure": "1.05"}      (bar)
+protonest/<deviceId>/stream/fmc/noise         {"noise": "65.3"}         (dB)
+protonest/<deviceId>/stream/fmc/co2           {"co2": "35"}             (%)
 protonest/<deviceId>/stream/fmc/product       {"productID": "...", "productName": "..."}
 ```
 
+> ⚠️ Do **not** publish `fmc/aqi` or `fmc/units` — both are derived client-side.
+
 ### State Topics (Subscribe)
+
 ```
-protonest/<deviceId>/state/fmc/machineControl {"status": "RUN"|"STOP"|"IDLE"}
-protonest/<deviceId>/state/fmc/ventilation    {"ventilation": "on"|"off", "mode": "manual"|"auto"}
+protonest/<deviceId>/state/fmc/machineControl  {"status": "RUN"|"STOP"|"IDLE"}
+protonest/<deviceId>/state/fmc/ventilation     {"ventilation": "on"|"off", "mode": "manual"|"auto"}
+protonest/<deviceId>/state/fmc/emergencyStop   {"emergencyStop": true|false, "reason": "..."}
+protonest/<deviceId>/state/fmc/controlMode     {"controlMode": "manual"|"auto"}
 ```
 
 ### Message Properties
+
 ```
 QoS: 1
 Retain: true (sensors), false (products/events)
@@ -946,16 +1018,16 @@ Format: JSON with string values
 
 ## 13. Support & Resources
 
-| Resource | URL/Contact |
-|----------|-------------|
-| ProtoNest Platform | https://protonestconnect.co |
-| API Base URL | https://api.protonestconnect.co/api/v1 |
-| MQTT Broker | mqtt.protonest.co:8883 |
-| WebSocket | wss://api.protonestconnect.co/ws |
-| GitHub Repository | ttmagedara2001/Factory-Management-System_PC |
+| Resource           | URL/Contact                                 |
+| ------------------ | ------------------------------------------- |
+| ProtoNest Platform | https://protonestconnect.co                 |
+| API Base URL       | https://api.protonestconnect.co/api/v1      |
+| MQTT Broker        | mqtt.protonest.co:8883                      |
+| WebSocket          | wss://api.protonestconnect.co/ws            |
+| GitHub Repository  | ttmagedara2001/Factory-Management-System_PC |
 
 ---
 
-**Document Version**: 4.1  
-**Last Updated**: January 22, 2026  
+**Document Version**: 4.2  
+**Last Updated**: February 18, 2026  
 **Maintainer**: Factory Management System Team

@@ -85,13 +85,23 @@ const SettingsWindow = ({
     }
 
     if (category === 'pressure') {
+      if (numValue < 0) {
+        errors[errorKey] = 'Pressure cannot be negative (bar)';
+        setValidationErrors(errors);
+        return false;
+      }
+      if (numValue > 1000) {
+        errors[errorKey] = 'Pressure cannot exceed 1000 bar';
+        setValidationErrors(errors);
+        return false;
+      }
       if (field === 'min' && numValue >= localThresholds.pressure.max) {
-        errors[errorKey] = 'Min must be less than max';
+        errors[errorKey] = 'Min must be less than max (bar)';
         setValidationErrors(errors);
         return false;
       }
       if (field === 'max' && numValue <= localThresholds.pressure.min) {
-        errors[errorKey] = 'Max must be greater than min';
+        errors[errorKey] = 'Max must be greater than min (bar)';
         setValidationErrors(errors);
         return false;
       }
@@ -137,8 +147,17 @@ const SettingsWindow = ({
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleControlModeChange = (mode) => {
+  const handleControlModeChange = async (mode) => {
     setControlMode(mode);
+    try {
+      webSocketClient?.sendControlModeCommand?.(mode);
+      await updateStateDetails(selectedDevice, 'controlMode', {
+        controlMode: mode,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('[Settings] Control mode update failed:', error);
+    }
   };
 
   /* 

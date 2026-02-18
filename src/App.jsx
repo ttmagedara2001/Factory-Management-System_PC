@@ -53,7 +53,7 @@ export default function App() {
 
   const [thresholds, setThresholds] = useState({
     vibration: { min: 0, critical: 9 },
-    pressure: { min: 5, max: 80 },
+    pressure: { min: 0.95, max: 1.10 },
     noise: { min: 0, critical: 90 },
     temperature: { min: 10, max: 35 },
     humidity: { min: 10, max: 80 },
@@ -190,26 +190,52 @@ export default function App() {
   // Factory status from emergency stop
   useEffect(() => { setFactoryStatus(isEmergencyStopped ? 'STOPPED' : 'RUNNING'); }, [isEmergencyStopped]);
 
-  // Emergency stop handler
+  // Emergency stop handler — publishes to fmc/emergencyStop topic
   const handleEmergencyStop = useCallback(async () => {
     setIsEmergencyStopped(true);
     setFactoryStatus('STOPPED');
     try {
-      webSocketClient?.sendMachineControlCommand?.('STOP');
+      webSocketClient?.sendEmergencyStopCommand?.(true);
       const { updateStateDetails } = await import('./services/deviceService.js');
-      await updateStateDetails(selectedDevice, 'machineControl', {
-        status: 'STOP', reason: 'EMERGENCY STOP', timestamp: new Date().toISOString(),
+      await updateStateDetails(selectedDevice, 'emergencyStop', {
+        emergencyStop: true, reason: 'EMERGENCY STOP', timestamp: new Date().toISOString(),
       });
     } catch (error) {
       console.error('[App] Emergency stop command failed:', error);
     }
   }, [selectedDevice]);
 
-  // Resume system handler
-  const handleResumeSystem = useCallback(() => {
+  // Resume system handler — publishes resume to fmc/emergencyStop topic and refreshes dashboard data
+  const handleResumeSystem = useCallback(async () => {
     setIsEmergencyStopped(false);
-    window.location.reload();
-  }, []);
+    setFactoryStatus('RUNNING');
+    try {
+      webSocketClient?.sendEmergencyStopCommand?.(false);
+      const { updateStateDetails } = await import('./services/deviceService.js');
+      await updateStateDetails(selectedDevice, 'emergencyStop', {
+        emergencyStop: false, reason: 'RESUMED', timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('[App] Resume command failed:', error);
+    }
+    // Refresh dashboard data without a page reload
+    try {
+      const { getCurrentUnitsFromBackend } = await import('./services/deviceService.js');
+      const { getProductsIn24Hours } = await import('./services/deviceService.js');
+      const { setUnitsFromBackend } = await import('./services/productionService.js');
+      const [backendUnits, productData] = await Promise.all([
+        getCurrentUnitsFromBackend(selectedDevice),
+        getProductsIn24Hours(selectedDevice),
+      ]);
+      if (backendUnits > 0) {
+        setUnitsFromBackend(selectedDevice, backendUnits);
+        setSensorData(prev => ({ ...prev, units: backendUnits }));
+      }
+      if (productData.count > 0) setProducts24h(productData);
+    } catch (error) {
+      console.warn('[App] Dashboard refresh after resume failed:', error.message);
+    }
+  }, [selectedDevice]);
 
   // Smart alert notifications — fire only on critical state ENTRY
   useEffect(() => {
@@ -227,8 +253,8 @@ export default function App() {
         `Temperature Critical: ${sensorData.temperature}°C exceeds max threshold`, 'critical'],
       ['vibration', sensorData.vibration, thresholds.vibration?.critical ?? 10, (v, t) => v > t,
         `Vibration Critical: ${sensorData.vibration} mm/s exceeds critical threshold`, 'critical'],
-      ['pressure', sensorData.pressure, { min: 95000, max: 110000 }, (v, r) => v < r.min || v > r.max,
-        `Pressure Critical: ${sensorData.pressure} Pa out of safe range (95000-110000)`, 'critical'],
+      ['pressure', sensorData.pressure, { min: 0.95, max: 1.10 }, (v, r) => v < r.min || v > r.max,
+        `Pressure Critical: ${sensorData.pressure} bar out of safe range (0.95–1.10 bar)`, 'critical'],
       ['noise', sensorData.noise, 85, (v, t) => v > t,
         `Noise Critical: ${sensorData.noise} dB exceeds critical threshold`, 'critical'],
       ['humidity', sensorData.humidity, 70, (v, t) => v > t,
