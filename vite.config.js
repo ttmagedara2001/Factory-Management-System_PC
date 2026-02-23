@@ -10,7 +10,7 @@ import tailwindcss from "@tailwindcss/vite";
 //   https://<owner>.github.io/Factory-Management-System_PC/
 // so `base` is set to the repo name for non-dev builds.
 export default defineConfig(({ command, mode }) => ({
-  base: mode === "production" ? "/Factory-Management-System_PC/" : "/",
+  base: "/",
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
