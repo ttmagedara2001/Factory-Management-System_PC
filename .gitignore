@@ -12,11 +12,13 @@ dist
 dist-ssr
 *.local
 
-# Environment variables (contains secrets)
+# Environment variables (contains secrets — never commit real values)
 .env
-.env.example
 .env.local
+.env.development
+.env.production
 .env.*.local
+# .env.example is intentionally tracked: it lists required keys without values
 
 # Editor directories and files
 .vscode/*
@@ -28,3 +30,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vercel
+.env*.local

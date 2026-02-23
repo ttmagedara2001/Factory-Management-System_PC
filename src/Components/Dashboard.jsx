@@ -199,7 +199,7 @@ const Dashboard = ({
           </div>
 
           {/* Real Time Window Component */}
-          <RealTimeWindow thresholds={thresholds} sensorData={sensorData} selectedDevice={selectedDevice} controlMode={controlMode} />
+          <RealTimeWindow thresholds={thresholds} sensorData={sensorData} selectedDevice={selectedDevice} controlMode={controlMode} webSocketClient={webSocketClient} />
 
         </div>
 

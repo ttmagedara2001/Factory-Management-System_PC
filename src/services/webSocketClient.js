@@ -21,8 +21,14 @@
 
 import { Client } from "@stomp/stompjs";
 
-const BASE_WS_URL = "wss://api.protonestconnect.co/ws";
+const BASE_WS_URL = import.meta.env.VITE_WS_URL;
 const IS_DEV = import.meta.env.DEV;
+
+if (!BASE_WS_URL) {
+  throw new Error(
+    "[WS] VITE_WS_URL is not defined. Add it to your .env file or GitHub Secrets.",
+  );
+}
 
 // ---------------------------------------------------------------------------
 // WebSocketClient

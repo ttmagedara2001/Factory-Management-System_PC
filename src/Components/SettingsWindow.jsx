@@ -18,6 +18,7 @@ const SettingsWindow = ({
   const [machineStatus, setMachineStatus] = useState(isEmergencyStopped ? 'stopped' : 'running');
   const [isSendingCommand, setIsSendingCommand] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
+  const [pendingMode, setPendingMode] = useState(null); // null | 'auto' — awaiting confirmation
 
   // Update machine status when emergency stop changes
   useEffect(() => {
@@ -147,7 +148,17 @@ const SettingsWindow = ({
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleControlModeChange = async (mode) => {
+  const handleControlModeChange = (mode) => {
+    // Switching TO auto requires confirmation — show inline dialog instead of native confirm
+    if (mode === 'auto' && controlMode !== 'auto') {
+      setPendingMode('auto');
+      return;
+    }
+    applyControlModeChange(mode);
+  };
+
+  const applyControlModeChange = async (mode) => {
+    setPendingMode(null);
     setControlMode(mode);
     try {
       webSocketClient?.sendControlModeCommand?.(mode);
@@ -155,6 +166,7 @@ const SettingsWindow = ({
         controlMode: mode,
         timestamp: new Date().toISOString(),
       });
+      console.log(`[Settings] Control mode changed to: ${mode}`);
     } catch (error) {
       console.error('[Settings] Control mode update failed:', error);
     }
@@ -240,20 +252,26 @@ const SettingsWindow = ({
           console.warn(`🚨 [Auto-Control] Critical condition detected: ${reason}. Stopping machine.`);
 
           try {
-            // 1. Send STOP command
+            // 1. Send STOP command via HTTP
             await updateStateDetails(selectedDevice, 'machineControl', {
               status: 'STOP',
               reason: `Auto-stop: ${reason}`,
               timestamp: new Date().toISOString()
             });
 
-            // 2. Update local state
+            // 2. Update local state immediately
             setMachineStatus('stopped');
-
-            // 3. Switch to MANUAL mode to prevent auto-restart
             setControlMode('manual');
 
-            // 4. Alert user
+            // 3. Publish control mode change via WebSocket + HTTP
+            webSocketClient?.sendControlModeCommand?.('manual');
+            await updateStateDetails(selectedDevice, 'controlMode', {
+              controlMode: 'manual',
+              reason: `Auto-switched: ${reason}`,
+              timestamp: new Date().toISOString(),
+            });
+
+            // 4. Alert user after state is persisted
             alert(`⚠️ CRITICAL SAFETY STOP ⚠️\n\nMachine stopped automatically.\nReason: ${reason}\n\nSystem switched to MANUAL mode.`);
 
           } catch (error) {
@@ -383,6 +401,36 @@ const SettingsWindow = ({
           <h1 className="text-base sm:text-lg font-bold text-slate-800 uppercase tracking-wide">Threshold Settings</h1>
         </div>
       </div>
+
+      {/* AUTO Mode Confirmation Banner */}
+      {pendingMode === 'auto' && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl shadow-sm">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-xs sm:text-sm font-bold text-amber-800">Switch to AUTO Mode?</p>
+              <p className="text-[10px] sm:text-xs text-amber-700 mt-1">
+                In AUTO mode, the machine and ventilation will be controlled automatically based on sensor thresholds.
+                Manual machine controls will be disabled.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3 justify-end">
+            <button
+              onClick={() => setPendingMode(null)}
+              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => applyControlModeChange('auto')}
+              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-green-500 hover:bg-green-600 text-white transition-colors"
+            >
+              Confirm AUTO Mode
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-yellow-50 border-l-4 border-yellow-400 p-2 sm:p-3 mb-4 rounded-lg">
         <div className="flex items-start gap-2">

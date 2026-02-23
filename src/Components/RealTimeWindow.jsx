@@ -21,7 +21,7 @@ const AUTO_VENTILATION_THRESHOLDS = {
   },
 };
 
-const RealTimeWindow = ({ thresholds, sensorData, selectedDevice, controlMode = 'manual' }) => {
+const RealTimeWindow = ({ thresholds, sensorData, selectedDevice, controlMode = 'manual', webSocketClient }) => {
   const [ventilation, setVentilation] = useState(false);
   const [isSendingCommand, setIsSendingCommand] = useState(false);
   const lastAutoCommandRef = useRef(null); // Prevent rapid auto commands
@@ -94,6 +94,10 @@ const RealTimeWindow = ({ thresholds, sensorData, selectedDevice, controlMode = 
           setIsSendingCommand(true);
           lastAutoCommandRef.current = now;
 
+          // Publish via WebSocket for immediate firmware response
+          webSocketClient?.sendVentilationCommand?.(command, 'auto');
+
+          // Persist via HTTP API
           await updateStateDetails(selectedDevice, 'ventilation', {
             ventilation: command,
             mode: 'auto',
@@ -149,15 +153,23 @@ const RealTimeWindow = ({ thresholds, sensorData, selectedDevice, controlMode = 
     try {
       console.log(`📡 [RealTimeWindow] Sending ventilation command to ${selectedDevice}: ${command}`);
 
+      // Optimistic UI update
+      setVentilation(newVentilation);
+
+      // Publish via WebSocket for immediate firmware response
+      webSocketClient?.sendVentilationCommand?.(command, 'manual');
+
+      // Persist via HTTP API
       await updateStateDetails(selectedDevice, 'ventilation', {
         ventilation: command,
         mode: 'manual'
       });
 
       console.log(`✅ [RealTimeWindow] Ventilation command sent successfully: ${command}`);
-      setVentilation(newVentilation);
     } catch (error) {
       console.error('❌ [RealTimeWindow] Failed to send ventilation command:', error);
+      // Revert optimistic update on failure
+      setVentilation(ventilation);
       alert('Failed to update ventilation. Please try again.');
     } finally {
       setIsSendingCommand(false);

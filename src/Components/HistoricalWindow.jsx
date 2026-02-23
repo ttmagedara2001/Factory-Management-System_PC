@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import * as XLSX from 'xlsx';
 import { History, Calendar, Download, Filter, Search, TrendingUp, AlertTriangle, Eye, EyeOff, X, Loader2, RefreshCw, Clock, Database, Activity } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, CartesianGrid, ReferenceLine } from 'recharts';
 import {
@@ -210,70 +211,486 @@ const HistoricalWindow = ({
     setSelectedCharts(newState);
   };
 
-  const convertToCSV = (data, headers) => {
-    const csvRows = [];
-    csvRows.push(headers.join(','));
+  // ═══════════════════════════════════════════════════════════════════════════
+  // XLSX EXPORT HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
 
-    data.forEach(row => {
-      const values = headers.map(header => {
-        const value = row[header.toLowerCase().replace(' ', '')];
-        return `"${value}"`;
-      });
-      csvRows.push(values.join(','));
-    });
-
-    return csvRows.join('\n');
+  /**
+   * Apply a consistent style to a cell in the worksheet.
+   * @param {object} ws  - worksheet object
+   * @param {string} ref - cell address e.g. "A1"
+   * @param {object} style
+   */
+  const styleCell = (ws, ref, style) => {
+    if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+    ws[ref].s = style;
   };
 
-  const downloadCSV = (csvContent, filename) => {
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
+  /**
+   * Build and download a styled multi-sheet Excel report.
+   */
   const handleExport = () => {
-    const timestamp = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const exportedAt = now.toLocaleString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    const fileTimestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const deviceLabel = selectedDevice || 'Unknown Device';
+    const rangeLabel = dateRange.toUpperCase();
 
-    // Determine which data to export based on selected range
-    let exportRange, exportGran;
-    if (exportDateRange === 'current') {
-      exportRange = dateRange;
-      exportGran = granularity;
-    } else {
-      exportRange = exportDateRange;
-      exportGran = 'daily'; // Default granularity for export
-    }
+    // ── Shared style palettes ──────────────────────────────────────────────
+    const STYLES = {
+      reportTitle: {
+        font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '1E3A5F' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        border: { bottom: { style: 'medium', color: { rgb: '3B82F6' } } }
+      },
+      metaLabel: {
+        font: { bold: true, sz: 10, color: { rgb: '475569' } },
+        fill: { fgColor: { rgb: 'F1F5F9' } },
+        alignment: { horizontal: 'right', vertical: 'center' },
+        border: {
+          top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+          bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+          left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+          right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+        }
+      },
+      metaValue: {
+        font: { sz: 10, color: { rgb: '1E293B' } },
+        fill: { fgColor: { rgb: 'FFFFFF' } },
+        alignment: { horizontal: 'left', vertical: 'center' },
+        border: {
+          top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+          bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+          left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+          right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+        }
+      },
+      sectionHeader: {
+        font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '2563EB' } },
+        alignment: { horizontal: 'left', vertical: 'center' },
+        border: { bottom: { style: 'medium', color: { rgb: '1D4ED8' } } }
+      },
+      colHeader: {
+        font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '334155' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        border: {
+          top: { style: 'thin', color: { rgb: '475569' } },
+          bottom: { style: 'medium', color: { rgb: '475569' } },
+          left: { style: 'thin', color: { rgb: '475569' } },
+          right: { style: 'thin', color: { rgb: '475569' } }
+        }
+      },
+      dataEven: {
+        font: { sz: 10, color: { rgb: '1E293B' } },
+        fill: { fgColor: { rgb: 'F8FAFC' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin', color: { rgb: 'E2E8F0' } },
+          bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
+          left: { style: 'thin', color: { rgb: 'E2E8F0' } },
+          right: { style: 'thin', color: { rgb: 'E2E8F0' } }
+        }
+      },
+      dataOdd: {
+        font: { sz: 10, color: { rgb: '1E293B' } },
+        fill: { fgColor: { rgb: 'FFFFFF' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin', color: { rgb: 'E2E8F0' } },
+          bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
+          left: { style: 'thin', color: { rgb: 'E2E8F0' } },
+          right: { style: 'thin', color: { rgb: 'E2E8F0' } }
+        }
+      },
+      dataGood: {
+        font: { bold: true, sz: 10, color: { rgb: '166534' } },
+        fill: { fgColor: { rgb: 'DCFCE7' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin', color: { rgb: 'BBF7D0' } },
+          bottom: { style: 'thin', color: { rgb: 'BBF7D0' } },
+          left: { style: 'thin', color: { rgb: 'BBF7D0' } },
+          right: { style: 'thin', color: { rgb: 'BBF7D0' } }
+        }
+      },
+      dataWarning: {
+        font: { bold: true, sz: 10, color: { rgb: '92400E' } },
+        fill: { fgColor: { rgb: 'FEF3C7' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin', color: { rgb: 'FDE68A' } },
+          bottom: { style: 'thin', color: { rgb: 'FDE68A' } },
+          left: { style: 'thin', color: { rgb: 'FDE68A' } },
+          right: { style: 'thin', color: { rgb: 'FDE68A' } }
+        }
+      },
+      dataCritical: {
+        font: { bold: true, sz: 10, color: { rgb: '991B1B' } },
+        fill: { fgColor: { rgb: 'FEE2E2' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin', color: { rgb: 'FECACA' } },
+          bottom: { style: 'thin', color: { rgb: 'FECACA' } },
+          left: { style: 'thin', color: { rgb: 'FECACA' } },
+          right: { style: 'thin', color: { rgb: 'FECACA' } }
+        }
+      },
+      footer: {
+        font: { italic: true, sz: 9, color: { rgb: '94A3B8' } },
+        fill: { fgColor: { rgb: 'F8FAFC' } },
+        alignment: { horizontal: 'center', vertical: 'center' }
+      }
+    };
 
-    // Generate data for export range
-    const exportMachineData = machinePerformanceData;
-    const exportEnvData = environmentalData;
-    const exportProdData = productionData;
-    const exportOEEData = oeeData;
+    /**
+     * Write a cell with value + style.
+     * r = 0-based row, c = 0-based col.
+     */
+    const writeCell = (ws, r, c, value, style, type = 's') => {
+      const ref = XLSX.utils.encode_cell({ r, c });
+      ws[ref] = { t: type, v: value, s: style };
+    };
 
+    /**
+     * Merge cells in a worksheet.
+     * s:start r/c, e:end r/c (both 0-based, inclusive).
+     */
+    const merge = (ws, sr, sc, er, ec) => {
+      if (!ws['!merges']) ws['!merges'] = [];
+      ws['!merges'].push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
+    };
+
+    /**
+     * Build a report sheet with:
+     *  Row 0      — Report Title (merged across all cols)
+     *  Rows 1-4   — Metadata block (Device, Date range, Exported at, Total records)
+     *  Row 5      — Blank separator
+     *  Row 6      — Section header (merged)
+     *  Row 7      — Column headers
+     *  Rows 8+    — Data rows (alternating, with status-color on key metrics)
+     *  Last row   — Footer note
+     */
+    const buildSheet = ({ title, icon, sectionLabel, columns, rows, colWidths, statusCol, statusFn }) => {
+      const ws = {};
+      const numCols = columns.length;
+      const lastCol = numCols - 1;
+      let r = 0;
+
+      // ── Row 0: Report title ─────────────────────────────────────────────
+      writeCell(ws, r, 0, `${icon}  ${title} — Factory Management Report`, STYLES.reportTitle);
+      merge(ws, r, 0, r, lastCol);
+      r++;
+
+      // ── Rows 1-4: Metadata block ────────────────────────────────────────
+      const meta = [
+        ['📟  Device', deviceLabel],
+        ['📅  Time Range', rangeLabel],
+        ['🕐  Exported At', exportedAt],
+        ['📊  Total Records', `${rows.length} entries`],
+      ];
+      meta.forEach(([label, value]) => {
+        writeCell(ws, r, 0, label, STYLES.metaLabel);
+        merge(ws, r, 0, r, 1);
+        writeCell(ws, r, 2, value, STYLES.metaValue);
+        merge(ws, r, 2, r, lastCol);
+        r++;
+      });
+
+      // ── Row: Blank separator ────────────────────────────────────────────
+      r++;
+
+      // ── Row: Section header ─────────────────────────────────────────────
+      writeCell(ws, r, 0, `  ${sectionLabel}`, STYLES.sectionHeader);
+      merge(ws, r, 0, r, lastCol);
+      r++;
+
+      // ── Row: Column headers ─────────────────────────────────────────────
+      columns.forEach((col, c) => {
+        writeCell(ws, r, c, col.label, STYLES.colHeader);
+      });
+      r++;
+
+      // ── Data rows ───────────────────────────────────────────────────────
+      if (rows.length === 0) {
+        writeCell(ws, r, 0, 'No data available for the selected range.', {
+          font: { italic: true, sz: 10, color: { rgb: '94A3B8' } },
+          alignment: { horizontal: 'center' }
+        });
+        merge(ws, r, 0, r, lastCol);
+        r++;
+      } else {
+        rows.forEach((row, rowIdx) => {
+          columns.forEach((col, c) => {
+            const raw = row[col.key];
+            let display = raw === null || raw === undefined || raw === '' ? '—' : raw;
+
+            // Format numbers
+            if (typeof raw === 'number') {
+              if (col.decimals !== undefined) {
+                display = raw.toFixed(col.decimals);
+              }
+              if (col.suffix) display = `${display}${col.suffix}`;
+            }
+
+            // Status coloring on designated column
+            let cellStyle = rowIdx % 2 === 0 ? STYLES.dataEven : STYLES.dataOdd;
+            if (statusCol && col.key === statusCol && statusFn) {
+              const status = statusFn(col.key, raw);
+              if (status === 'good') cellStyle = STYLES.dataGood;
+              else if (status === 'warning') cellStyle = STYLES.dataWarning;
+              else if (status === 'critical') cellStyle = STYLES.dataCritical;
+            }
+
+            writeCell(ws, r, c, display, cellStyle);
+          });
+          r++;
+        });
+      }
+
+      // ── Footer ──────────────────────────────────────────────────────────
+      r++;
+      writeCell(ws, r, 0,
+        `Generated by Factory Management System  •  ${exportedAt}  •  Device: ${deviceLabel}`,
+        STYLES.footer
+      );
+      merge(ws, r, 0, r, lastCol);
+
+      // ── Column widths ────────────────────────────────────────────────────
+      ws['!cols'] = colWidths || columns.map(() => ({ wch: 18 }));
+
+      // ── Row heights ──────────────────────────────────────────────────────
+      ws['!rows'] = [{ hpx: 36 }]; // Title row taller
+
+      // ── Sheet range ──────────────────────────────────────────────────────
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r, c: lastCol } });
+
+      return ws;
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Build workbook
+    // ─────────────────────────────────────────────────────────────────────────
+    const wb = XLSX.utils.book_new();
+    wb.Props = {
+      Title: 'Factory Management Report',
+      Subject: 'Historical Data Export',
+      Author: 'Factory Management System',
+      CreatedDate: now
+    };
+
+    // ── 1. Production Volume sheet ─────────────────────────────────────────
     if (selectedCharts.production) {
-      const csv = convertToCSV(exportProdData, ['Date', 'Produced', 'Target']);
-      downloadCSV(csv, `production_volume_${timestamp}.csv`);
+      const ws = buildSheet({
+        title: 'Production Volume',
+        icon: '🏭',
+        sectionLabel: '📦  Production Volume Data',
+        columns: [
+          { label: '📅  Date', key: 'date' },
+          { label: '✅  Units Produced', key: 'produced', decimals: 0 },
+          { label: '🎯  Target Units', key: 'target', decimals: 0 },
+          { label: '📈  Achievement (%)', key: '_achievement' },
+          { label: '🔵  Status', key: '_status' },
+        ],
+        rows: productionData.map(r => {
+          const achievement = r.target > 0 ? ((r.produced / r.target) * 100).toFixed(1) : '—';
+          const status = r.target > 0
+            ? r.produced >= r.target ? '✅ On Target'
+              : r.produced >= r.target * 0.8 ? '⚠️ Near Target'
+              : '❌ Below Target'
+            : '—';
+          return { ...r, _achievement: achievement !== '—' ? `${achievement}%` : '—', _status: status };
+        }),
+        colWidths: [{ wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 20 }],
+      });
+      XLSX.utils.book_append_sheet(wb, ws, '🏭 Production');
     }
 
+    // ── 2. OEE Trends sheet ────────────────────────────────────────────────
     if (selectedCharts.oee) {
-      const csv = convertToCSV(exportOEEData, ['Week', 'OEE']);
-      downloadCSV(csv, `oee_trends_${timestamp}.csv`);
+      const ws = buildSheet({
+        title: 'OEE Trends',
+        icon: '⚙️',
+        sectionLabel: '📊  Overall Equipment Effectiveness (OEE)',
+        columns: [
+          { label: '📅  Week / Date', key: 'week' },
+          { label: '⚙️  OEE (%)', key: 'oee', decimals: 1 },
+          { label: '🟢  Availability (%)', key: 'availability', decimals: 1 },
+          { label: '⚡  Performance (%)', key: 'performance', decimals: 1 },
+          { label: '🎯  Quality (%)', key: 'quality', decimals: 1 },
+          { label: '🔵  OEE Rating', key: '_rating' },
+        ],
+        rows: oeeData.map(r => {
+          const rating = r.oee >= 85 ? '🟢 Excellent (≥85%)'
+            : r.oee >= 60 ? '🟡 Acceptable (60–84%)'
+            : '🔴 Needs Improvement (<60%)';
+          return { ...r, _rating: rating };
+        }),
+        colWidths: [{ wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 28 }],
+        statusCol: 'oee',
+        statusFn: (_, v) => v >= 85 ? 'good' : v >= 60 ? 'warning' : 'critical',
+      });
+      XLSX.utils.book_append_sheet(wb, ws, '⚙️ OEE Trends');
     }
 
+    // ── 3. Machine Performance sheet ──────────────────────────────────────
     if (selectedCharts.machinePerformance) {
-      const csv = convertToCSV(exportMachineData, ['Time', 'Vibration', 'Pressure', 'Noise']);
-      downloadCSV(csv, `machine_performance_${timestamp}.csv`);
+      const ws = buildSheet({
+        title: 'Machine Performance',
+        icon: '🔧',
+        sectionLabel: '🔧  Machine Performance Data',
+        columns: [
+          { label: '🕐  Timestamp', key: 'time' },
+          { label: '📳  Vibration (mm/s)', key: 'vibration', decimals: 2 },
+          { label: '🔵  Pressure (bar)', key: 'pressure', decimals: 2 },
+          { label: '🔊  Noise Level (dB)', key: 'noise', decimals: 1 },
+          { label: '📋  Vibration Status', key: '_vibStatus' },
+          { label: '📋  Pressure Status', key: '_presStatus' },
+          { label: '📋  Noise Status', key: '_noiseStatus' },
+        ],
+        rows: machinePerformanceData.map(r => {
+          const vThresh = thresholds?.vibration;
+          const pThresh = thresholds?.pressure;
+          const nThresh = thresholds?.noise;
+          const vibStatus = !r.vibration ? '—'
+            : vThresh?.critical && r.vibration >= vThresh.critical ? '🔴 Critical'
+            : vThresh?.warning && r.vibration >= vThresh.warning ? '🟡 Warning'
+            : '🟢 Normal';
+          const presStatus = !r.pressure ? '—'
+            : pThresh?.max && r.pressure >= pThresh.max ? '🔴 High'
+            : pThresh?.min && r.pressure <= pThresh.min ? '🔴 Low'
+            : '🟢 Normal';
+          const noiseStatus = !r.noise ? '—'
+            : nThresh?.critical && r.noise >= nThresh.critical ? '🔴 Critical'
+            : nThresh?.warning && r.noise >= nThresh.warning ? '🟡 Warning'
+            : '🟢 Normal';
+          return { ...r, _vibStatus: vibStatus, _presStatus: presStatus, _noiseStatus: noiseStatus };
+        }),
+        colWidths: [{ wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 18 }, { wch: 18 }],
+      });
+      XLSX.utils.book_append_sheet(wb, ws, '🔧 Machine Perf');
     }
 
+    // ── 4. Environmental Trends sheet ─────────────────────────────────────
     if (selectedCharts.environmental) {
-      const csv = convertToCSV(exportEnvData, ['Time', 'Temperature', 'Humidity', 'CO2', 'AQI']);
-      downloadCSV(csv, `environmental_trends_${timestamp}.csv`);
+      const ws = buildSheet({
+        title: 'Environmental Trends',
+        icon: '🌡️',
+        sectionLabel: '🌿  Environmental Sensor Data',
+        columns: [
+          { label: '🕐  Timestamp', key: 'time' },
+          { label: '🌡️  Temperature (°C)', key: 'temperature', decimals: 1 },
+          { label: '💧  Humidity (%)', key: 'humidity', decimals: 1 },
+          { label: '💨  CO2 (%)', key: 'co2', decimals: 2 },
+          { label: '🌬️  Air Quality Index', key: '_aqi' },
+          { label: '📋  Temp Status', key: '_tempStatus' },
+          { label: '📋  Humidity Status', key: '_humStatus' },
+        ],
+        rows: environmentalData.map(r => {
+          const tThresh = thresholds?.temperature;
+          const hThresh = thresholds?.humidity;
+          // Client-side AQI calculation (temperature + humidity + CO2 weighted)
+          const aqiRaw = r.temperature !== null && r.humidity !== null && r.co2 !== null
+            ? Math.min(100, Math.max(0, Math.round(
+                100 - ((r.temperature - 20) * 0.5) - ((r.humidity - 50) * 0.3) - (r.co2 * 0.2)
+              )))
+            : null;
+          const aqiLabel = aqiRaw === null ? '—'
+            : aqiRaw >= 75 ? `${aqiRaw} 🟢 Good`
+            : aqiRaw >= 50 ? `${aqiRaw} 🟡 Fair`
+            : `${aqiRaw} 🔴 Poor`;
+          const tempStatus = !r.temperature ? '—'
+            : tThresh?.max && r.temperature >= tThresh.max ? '🔴 Critical High'
+            : tThresh?.min && r.temperature <= tThresh.min ? '🔴 Critical Low'
+            : r.temperature > 35 ? '🟡 Elevated'
+            : '🟢 Normal';
+          const humStatus = !r.humidity ? '—'
+            : hThresh?.max && r.humidity >= hThresh.max ? '🔴 Too High'
+            : hThresh?.min && r.humidity <= hThresh.min ? '🔴 Too Low'
+            : r.humidity > 70 ? '🟡 High'
+            : '🟢 Normal';
+          return { ...r, _aqi: aqiLabel, _tempStatus: tempStatus, _humStatus: humStatus };
+        }),
+        colWidths: [{ wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 22 }],
+        statusCol: 'temperature',
+        statusFn: (_, v) => {
+          const t = thresholds?.temperature;
+          if (!v) return null;
+          if (t?.max && v >= t.max) return 'critical';
+          if (t?.min && v <= t.min) return 'critical';
+          if (v > 35) return 'warning';
+          return 'good';
+        },
+      });
+      XLSX.utils.book_append_sheet(wb, ws, '🌡️ Environment');
     }
 
+    // ── 5. Summary sheet ──────────────────────────────────────────────────
+    {
+      const ws = {};
+      let r = 0;
+      const numCols = 3;
+
+      const writeS = (row, col, val, style) => {
+        const ref = XLSX.utils.encode_cell({ r: row, c: col });
+        ws[ref] = { t: 's', v: String(val), s: style };
+      };
+
+      // Title
+      writeS(r, 0, '📋  Export Summary — Factory Management System', STYLES.reportTitle);
+      merge(ws, r, 0, r, numCols);
+      r++;
+
+      // Meta
+      [
+        ['Device', deviceLabel],
+        ['Exported At', exportedAt],
+        ['Time Range', rangeLabel],
+        ['Production Records', `${productionData.length}`],
+        ['OEE Data Points', `${oeeData.length}`],
+        ['Machine Perf. Records', `${machinePerformanceData.length}`],
+        ['Environmental Records', `${environmentalData.length}`],
+        ['MTBF (hours)', `${mtbfHours || '—'}`],
+      ].forEach(([label, value]) => {
+        writeS(r, 0, label, STYLES.metaLabel);
+        writeS(r, 1, value, STYLES.metaValue);
+        merge(ws, r, 1, r, numCols);
+        r++;
+      });
+
+      r++;
+      writeS(r, 0,
+        'Note: OEE status — ≥85% Excellent  |  60–84% Acceptable  |  <60% Needs Improvement',
+        STYLES.footer
+      );
+      merge(ws, r, 0, r, numCols);
+      r++;
+      writeS(r, 0,
+        'Air Quality Index (AQI) is calculated client-side from Temperature, Humidity, and CO2 values.',
+        STYLES.footer
+      );
+      merge(ws, r, 0, r, numCols);
+      r++;
+      writeS(r, 0,
+        `Generated by Factory Management System  •  ${exportedAt}`,
+        STYLES.footer
+      );
+      merge(ws, r, 0, r, numCols);
+
+      ws['!cols'] = [{ wch: 26 }, { wch: 36 }, { wch: 20 }, { wch: 20 }];
+      ws['!rows'] = [{ hpx: 36 }];
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r, c: numCols } });
+
+      XLSX.utils.book_append_sheet(wb, ws, '📋 Summary');
+    }
+
+    // ── Write and trigger download ─────────────────────────────────────────
+    XLSX.writeFile(wb, `factory_report_${deviceLabel}_${fileTimestamp}.xlsx`, { bookType: 'xlsx', type: 'binary' });
     setShowExportDialog(false);
   };
 
@@ -442,7 +859,7 @@ const HistoricalWindow = ({
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors shadow-sm"
             >
               <Download size={14} />
-              Export CSV
+              Export Excel
             </button>
           </div>
         </div>
@@ -713,121 +1130,110 @@ const HistoricalWindow = ({
       {showExportDialog && (
         <div className="fixed inset-0 z-50" onClick={() => setShowExportDialog(false)}>
           <div
-            className="absolute top-24 right-8 bg-slate-50 rounded-xl shadow-2xl border border-slate-200 w-96 max-h-[calc(100vh-200px)] overflow-hidden flex flex-col"
+            className="absolute top-24 right-8 bg-slate-50 rounded-xl shadow-2xl border border-slate-200 w-[420px] max-h-[calc(100vh-200px)] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center p-4 bg-white border-b border-slate-200">
-              <h3 className="text-sm font-bold text-slate-800 uppercase">Export Data</h3>
+            {/* Dialog header */}
+            <div className="flex justify-between items-center p-4 bg-gradient-to-r from-green-700 to-green-600 rounded-t-xl">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-white/20 rounded-lg">
+                  <Download size={16} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wide">Export Report</h3>
+                  <p className="text-[10px] text-green-100">Styled Excel (.xlsx) with colored headers</p>
+                </div>
+              </div>
               <button
                 onClick={() => setShowExportDialog(false)}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-white/70 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
               >
                 <X size={18} />
               </button>
             </div>
 
             <div className="overflow-y-auto p-4 space-y-4">
-              {/* Date Range Selection for Export */}
-              <div className="bg-white p-3 rounded-lg border border-slate-200">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Export Range</label>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs">
-                    <input
-                      type="radio"
-                      name="exportRange"
-                      value="current"
-                      checked={exportDateRange === 'current'}
-                      onChange={() => setExportDateRange('current')}
-                      className="w-3 h-3 text-blue-500"
-                    />
-                    <span className="text-slate-700">Current View</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-xs">
-                    <input
-                      type="radio"
-                      name="exportRange"
-                      value="24h"
-                      checked={exportDateRange === '24h'}
-                      onChange={() => setExportDateRange('24h')}
-                      className="w-3 h-3 text-blue-500"
-                    />
-                    <span className="text-slate-700">Last 24 Hours</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-xs">
-                    <input
-                      type="radio"
-                      name="exportRange"
-                      value="7d"
-                      checked={exportDateRange === '7d'}
-                      onChange={() => setExportDateRange('7d')}
-                      className="w-3 h-3 text-blue-500"
-                    />
-                    <span className="text-slate-700">Last 7 Days</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-xs">
-                    <input
-                      type="radio"
-                      name="exportRange"
-                      value="30d"
-                      checked={exportDateRange === '30d'}
-                      onChange={() => setExportDateRange('30d')}
-                      className="w-3 h-3 text-blue-500"
-                    />
-                    <span className="text-slate-700">Last 30 Days</span>
-                  </label>
-                </div>
+              {/* What's included info */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-[10px] font-bold text-blue-800 uppercase mb-2">📋  What's Included in the Excel File</p>
+                <ul className="text-[10px] text-blue-700 space-y-1">
+                  <li>📋 <strong>Summary Sheet</strong> — device info, totals, and notes</li>
+                  <li>🏭 <strong>Production Sheet</strong> — units, targets, achievement %</li>
+                  <li>⚙️ <strong>OEE Sheet</strong> — availability, performance, quality</li>
+                  <li>🔧 <strong>Machine Perf. Sheet</strong> — vibration, pressure, noise + status</li>
+                  <li>🌡️ <strong>Environment Sheet</strong> — temperature, humidity, CO2, AQI</li>
+                </ul>
+                <p className="text-[9px] text-blue-600 mt-2">Each sheet has colored headings, alternating row styles, and status indicators (🟢 🟡 🔴).</p>
               </div>
 
               {/* Charts Selection */}
               <div className="bg-white p-3 rounded-lg border border-slate-200">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Select Charts</label>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs">
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">📊  Sheets to Include</label>
+                <div className="space-y-2.5">
+                  <label className="flex items-center gap-3 cursor-pointer group">
                     <input
                       type="checkbox"
                       checked={selectedCharts.production}
                       onChange={() => toggleChartSelection('production')}
-                      className="w-3 h-3 text-blue-500 rounded"
+                      className="w-3.5 h-3.5 text-blue-500 rounded accent-blue-500"
                     />
-                    <span className="text-slate-700">Production Volume</span>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-700 group-hover:text-slate-900">🏭  Production Volume</span>
+                      <p className="text-[9px] text-slate-400">Date, units produced, target, achievement %</p>
+                    </div>
                   </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <label className="flex items-center gap-3 cursor-pointer group">
                     <input
                       type="checkbox"
                       checked={selectedCharts.oee}
                       onChange={() => toggleChartSelection('oee')}
-                      className="w-3 h-3 text-blue-500 rounded"
+                      className="w-3.5 h-3.5 text-blue-500 rounded accent-blue-500"
                     />
-                    <span className="text-slate-700">OEE Trends</span>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-700 group-hover:text-slate-900">⚙️  OEE Trends</span>
+                      <p className="text-[9px] text-slate-400">OEE %, availability, performance, quality + rating</p>
+                    </div>
                   </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <label className="flex items-center gap-3 cursor-pointer group">
                     <input
                       type="checkbox"
                       checked={selectedCharts.machinePerformance}
                       onChange={() => toggleChartSelection('machinePerformance')}
-                      className="w-3 h-3 text-blue-500 rounded"
+                      className="w-3.5 h-3.5 text-blue-500 rounded accent-blue-500"
                     />
-                    <span className="text-slate-700">Machine Performance</span>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-700 group-hover:text-slate-900">🔧  Machine Performance</span>
+                      <p className="text-[9px] text-slate-400">Vibration (mm/s), pressure (bar), noise (dB) + status</p>
+                    </div>
                   </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <label className="flex items-center gap-3 cursor-pointer group">
                     <input
                       type="checkbox"
                       checked={selectedCharts.environmental}
                       onChange={() => toggleChartSelection('environmental')}
-                      className="w-3 h-3 text-blue-500 rounded"
+                      className="w-3.5 h-3.5 text-blue-500 rounded accent-blue-500"
                     />
-                    <span className="text-slate-700">Environmental Trends</span>
+                    <div>
+                      <span className="text-xs font-semibold text-slate-700 group-hover:text-slate-900">🌡️  Environmental Trends</span>
+                      <p className="text-[9px] text-slate-400">Temperature (°C), humidity (%), CO2 (%), AQI + status</p>
+                    </div>
                   </label>
-
-
                 </div>
+              </div>
+
+              {/* Selected count badge */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] text-slate-500">
+                  {Object.values(selectedCharts).filter(Boolean).length} of 4 sheets selected
+                  <span className="text-slate-400"> + Summary always included</span>
+                </span>
               </div>
             </div>
 
-            <div className="flex gap-2 p-4 bg-white border-t border-slate-200">
+            <div className="flex gap-2 p-4 bg-white border-t border-slate-200 rounded-b-xl">
               <button
                 onClick={selectAllCharts}
                 className="flex-1 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-200 transition-colors"
@@ -837,9 +1243,10 @@ const HistoricalWindow = ({
               <button
                 onClick={handleExport}
                 disabled={!Object.values(selectedCharts).some(val => val)}
-                className="flex-1 px-3 py-2 bg-blue-500 text-white rounded-lg text-xs font-semibold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-2 flex items-center gap-2 px-5 py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
-                Export
+                <Download size={13} />
+                Download .xlsx
               </button>
             </div>
           </div>
