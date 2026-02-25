@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - new
   # Allow manual trigger from the Actions tab
   workflow_dispatch:
 
