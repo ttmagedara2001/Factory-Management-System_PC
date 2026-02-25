@@ -1,17 +1,3 @@
-# ──────────────────────────────────────────────────────────────────────────────
-# Deploy — Build Vite React app and publish to GitHub Pages
-#
-# Required GitHub Secrets (Settings → Secrets and variables → Actions):
-#   VITE_API_BASE_URL   — e.g. https://api.protonestconnect.co/api/v1/user
-#   VITE_WS_URL         — e.g. wss://api.protonestconnect.co/ws
-#   VITE_AUTH_EMAIL     — Protonest account email
-#   VITE_AUTH_SECRET_KEY — Secret key from Protonest dashboard
-#   VITE_DEVICE_ID      — Target device identifier
-#
-# After adding secrets, enable GitHub Pages in repo Settings:
-#   Settings → Pages → Source → "GitHub Actions"
-# ──────────────────────────────────────────────────────────────────────────────
-
 name: Build and Deploy
 
 on:
